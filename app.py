@@ -19,6 +19,16 @@ from utils.database import (
     update_interview_session
 )
 from utils.pdf_reader import extract_text_from_pdf, validate_resume_text, MAX_RESUME_TEXT_CHARS
+from utils.gemini import (
+    AIAnalysisError,
+    AIRateLimitError,
+    AINetworkError,
+    AIAuthError,
+    AIResponseFormatError,
+    AIServiceUnavailableError,
+    format_ai_error_for_user,
+    create_safe_fallback_analysis_payload,
+)
 from utils.report_generator import generate_pdf_report
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
@@ -181,13 +191,18 @@ def analyze():
         # Redirect user directly to their new placement analysis dashboard
         return redirect(url_for("dashboard", analysis_id=file_uuid))
 
+    except AIAnalysisError as aie:
+        logger.warning(f"AIAnalysisError in analysis workflow: {str(aie)}")
+        flash(aie.user_friendly_message, "error")
+        return redirect(url_for("index"))
     except ValueError as ve:
         logger.warning(f"Validation error in analysis workflow: {str(ve)}")
         flash(str(ve), "error")
         return redirect(url_for("index"))
     except Exception as e:
         logger.error(f"Analysis workflow crashed: {str(e)}")
-        flash(f"Analysis Failed: {str(e)}", "error")
+        friendly_message = format_ai_error_for_user(e)
+        flash(friendly_message, "error")
         return redirect(url_for("index"))
 
 @app.route("/dashboard/<analysis_id>")
