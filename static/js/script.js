@@ -476,6 +476,14 @@ function initCircularProgress() {
 /**
  * Manages the live interactive mock interview simulation
  */
+/**
+ * Manages the live interactive mock interview simulation with Voice-Enabled AI Interviewer:
+ * - Real-time Web Speech API recognition (Speech-to-Text) with continuous interim transcription
+ * - Audio visualizer wave animation and recording timer
+ * - Pre-submission editable transcript review
+ * - Speech Synthesis (Text-to-Speech) for interviewer questions with auto-speak toggle
+ * - Dynamic verbal indicators evaluation (Verbal clarity, filler words, STAR method)
+ */
 function initMockInterview() {
   const chatForm = document.getElementById("chatForm");
   if (!chatForm) return;
@@ -485,76 +493,313 @@ function initMockInterview() {
   const submitBtn = chatForm.querySelector("button[type='submit']");
   const evaluationPanel = document.getElementById("evaluationPanel");
   const btnMic = document.getElementById("btnMic");
+  const voiceRecordingPanel = document.getElementById("voiceRecordingPanel");
+  const btnStopVoice = document.getElementById("btnStopVoice");
+  const btnClearTranscript = document.getElementById("btnClearTranscript");
+  const btnAppendTranscript = document.getElementById("btnAppendTranscript");
+  const liveInterimText = document.getElementById("liveInterimText");
+  const recordingStatusText = document.getElementById("recordingStatusText");
+  const voiceWaveform = document.getElementById("voiceWaveform");
+  const speechTimerBadge = document.getElementById("speechTimerBadge");
+  const transcriptWordCount = document.getElementById("transcriptWordCount");
+  const toggleAutoTTS = document.getElementById("toggleAutoTTS");
 
-  // Voice recording / speech recognition integration
-  if (btnMic) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      btnMic.title = "Speech recognition not supported in this browser.";
-      btnMic.style.opacity = "0.5";
-    } else {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      let isRecording = false;
+  // State trackers
+  let recognition = null;
+  let isRecording = false;
+  let speechTimerInterval = null;
+  let speechSeconds = 0;
+  let activeUtteranceBtn = null;
 
+  // -------------------------------------------------------------
+  // 1. Text-to-Speech (TTS) Speech Synthesis Integration
+  // -------------------------------------------------------------
+  const isSpeechSynthesisSupported = "speechSynthesis" in window;
+
+  // Restore Auto-Speak toggle preference from localStorage
+  if (toggleAutoTTS) {
+    const savedAutoTTS = localStorage.getItem("ai_interview_auto_tts");
+    if (savedAutoTTS !== null) {
+      toggleAutoTTS.checked = savedAutoTTS === "true";
+    }
+    toggleAutoTTS.addEventListener("change", () => {
+      localStorage.setItem("ai_interview_auto_tts", toggleAutoTTS.checked);
+      if (!toggleAutoTTS.checked && isSpeechSynthesisSupported) {
+        window.speechSynthesis.cancel();
+        resetSpeakingButtons();
+      }
+    });
+  }
+
+  function resetSpeakingButtons() {
+    document.querySelectorAll(".btn-tts.speaking").forEach((btn) => {
+      btn.classList.remove("speaking");
+      btn.innerHTML = '<i class="fa-solid fa-volume-high me-1"></i> Listen';
+    });
+    activeUtteranceBtn = null;
+  }
+
+  function speakQuestionText(text, btnElement = null) {
+    if (!isSpeechSynthesisSupported || !text) return;
+
+    // Toggle stop if already speaking this button
+    if (btnElement && btnElement.classList.contains("speaking")) {
+      window.speechSynthesis.cancel();
+      resetSpeakingButtons();
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    resetSpeakingButtons();
+
+    // Clean plain text without markdown or HTML tags
+    const cleanText = text.replace(/<[^>]*>?/gm, "").replace(/\[\s*Question[^\]]+\]/gi, "").trim();
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+
+    // Choose preferred English voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoice = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Online")));
+    if (englishVoice) {
+      utterance.voice = englishVoice;
+    }
+
+    if (btnElement) {
+      activeUtteranceBtn = btnElement;
+      btnElement.classList.add("speaking");
+      btnElement.innerHTML = '<i class="fa-solid fa-volume-xmark me-1"></i> Stop';
+    }
+
+    utterance.onend = () => {
+      resetSpeakingButtons();
+    };
+
+    utterance.onerror = () => {
+      resetSpeakingButtons();
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Delegated click listener for all TTS buttons (initial & dynamically added)
+  if (chatContainer) {
+    chatContainer.addEventListener("click", (e) => {
+      const ttsBtn = e.target.closest(".btn-tts");
+      if (ttsBtn) {
+        e.preventDefault();
+        const textToSpeak = ttsBtn.getAttribute("data-tts") || ttsBtn.closest(".chat-bubble-agent")?.innerText || "";
+        speakQuestionText(textToSpeak, ttsBtn);
+      }
+    });
+  }
+
+  // Auto-speak initial active question if toggle is checked
+  if (toggleAutoTTS && toggleAutoTTS.checked) {
+    setTimeout(() => {
+      const currentQBubble = document.getElementById("currentQuestionBubble");
+      if (currentQBubble) {
+        const initialTtsBtn = currentQBubble.querySelector(".btn-tts");
+        const currentQText = document.getElementById("currentQuestionText")?.innerText || "";
+        speakQuestionText(currentQText, initialTtsBtn);
+      }
+    }, 600);
+  }
+
+  // -------------------------------------------------------------
+  // 2. Web Speech API (Speech-to-Text) & Audio Visualizer
+  // -------------------------------------------------------------
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    let finalTranscript = "";
+
+    function updateSpeechTimer() {
+      speechSeconds++;
+      const mins = String(Math.floor(speechSeconds / 60)).padStart(2, "0");
+      const secs = String(speechSeconds % 60).padStart(2, "0");
+      if (speechTimerBadge) {
+        speechTimerBadge.innerHTML = `<i class="fa-regular fa-clock me-1"></i>${mins}:${secs}`;
+      }
+    }
+
+    function updateTranscriptWordCount(text) {
+      if (!transcriptWordCount) return;
+      const count = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+      transcriptWordCount.innerText = `${count} word${count === 1 ? "" : "s"} captured`;
+    }
+
+    function startVoiceRecording() {
+      try {
+        finalTranscript = liveInterimText ? liveInterimText.innerText.trim() : "";
+        recognition.start();
+        isRecording = true;
+        speechSeconds = 0;
+        if (speechTimerBadge) speechTimerBadge.innerHTML = '<i class="fa-regular fa-clock me-1"></i>00:00';
+        clearInterval(speechTimerInterval);
+        speechTimerInterval = setInterval(updateSpeechTimer, 1000);
+
+        if (voiceRecordingPanel) voiceRecordingPanel.classList.remove("d-none");
+        if (voiceWaveform) voiceWaveform.classList.add("active");
+        if (recordingStatusText) {
+          recordingStatusText.innerText = "Listening... Speak clearly into your microphone";
+          recordingStatusText.className = "small fw-bold text-danger";
+        }
+        if (btnMic) {
+          btnMic.classList.remove("btn-outline-primary");
+          btnMic.classList.add("btn-danger");
+          btnMic.innerHTML = '<i class="fa-solid fa-microphone-slash me-1"></i> Stop Voice';
+        }
+      } catch (err) {
+        console.warn("Speech recognition already running or permission issue:", err);
+      }
+    }
+
+    function stopVoiceRecording() {
+      if (!isRecording) return;
+      isRecording = false;
+      try {
+        recognition.stop();
+      } catch (e) {
+        // Safe ignore
+      }
+      clearInterval(speechTimerInterval);
+      if (voiceWaveform) voiceWaveform.classList.remove("active");
+      if (recordingStatusText) {
+        recordingStatusText.innerText = "Recording paused. Review or insert your answer below.";
+        recordingStatusText.className = "small fw-bold text-success";
+      }
+      if (btnMic) {
+        btnMic.classList.remove("btn-danger");
+        btnMic.classList.add("btn-outline-primary");
+        btnMic.innerHTML = '<i class="fa-solid fa-microphone"></i> <span class="d-none d-sm-inline small fw-semibold">Voice Answer</span>';
+      }
+    }
+
+    if (btnMic) {
       btnMic.addEventListener("click", () => {
         if (!isRecording) {
-          try {
-            recognition.start();
-            isRecording = true;
-            btnMic.classList.remove("btn-outline-secondary");
-            btnMic.classList.add("btn-danger");
-            btnMic.innerHTML = '<i class="fa-solid fa-circle-stop"></i>';
-          } catch (e) {
-            console.warn(e);
-          }
+          startVoiceRecording();
         } else {
-          recognition.stop();
-          isRecording = false;
-          btnMic.classList.remove("btn-danger");
-          btnMic.classList.add("btn-outline-secondary");
-          btnMic.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+          stopVoiceRecording();
         }
       });
+    }
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          answerInput.value = answerInput.value ? `${answerInput.value} ${transcript}` : transcript;
+    if (btnStopVoice) {
+      btnStopVoice.addEventListener("click", () => {
+        stopVoiceRecording();
+      });
+    }
+
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += " " + event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
-      };
+      }
 
-      recognition.onend = () => {
-        isRecording = false;
-        btnMic.classList.remove("btn-danger");
-        btnMic.classList.add("btn-outline-secondary");
-        btnMic.innerHTML = '<i class="fa-solid fa-microphone"></i>';
-      };
+      const fullCapturedText = (finalTranscript + " " + interimTranscript).trim();
+      if (liveInterimText) {
+        liveInterimText.innerText = fullCapturedText;
+        updateTranscriptWordCount(fullCapturedText);
+      }
+    };
 
-      recognition.onerror = () => {
-        isRecording = false;
-        btnMic.classList.remove("btn-danger");
-        btnMic.classList.add("btn-outline-secondary");
-        btnMic.innerHTML = '<i class="fa-solid fa-microphone"></i>';
-      };
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      if (recordingStatusText) {
+        recordingStatusText.innerText = `Microphone notice: ${event.error}. Click Voice Answer to retry.`;
+        recordingStatusText.className = "small fw-semibold text-warning";
+      }
+      stopVoiceRecording();
+    };
+
+    recognition.onend = () => {
+      if (isRecording) {
+        // Auto-restart if continuous dictation stopped unexpectedly
+        try {
+          recognition.start();
+        } catch (e) {
+          stopVoiceRecording();
+        }
+      } else {
+        stopVoiceRecording();
+      }
+    };
+
+    // Pre-submission review actions
+    if (btnClearTranscript && liveInterimText) {
+      btnClearTranscript.addEventListener("click", () => {
+        liveInterimText.innerText = "";
+        finalTranscript = "";
+        updateTranscriptWordCount("");
+      });
+    }
+
+    if (btnAppendTranscript && liveInterimText && answerInput) {
+      btnAppendTranscript.addEventListener("click", () => {
+        const textToInsert = liveInterimText.innerText.trim();
+        if (textToInsert) {
+          const currentVal = answerInput.value.trim();
+          answerInput.value = currentVal ? `${currentVal} ${textToInsert}` : textToInsert;
+          triggerWordCounter(answerInput);
+          liveInterimText.innerText = "";
+          finalTranscript = "";
+          updateTranscriptWordCount("");
+          stopVoiceRecording();
+          answerInput.focus();
+        }
+      });
+    }
+
+    if (liveInterimText) {
+      liveInterimText.addEventListener("input", () => {
+        finalTranscript = liveInterimText.innerText.trim();
+        updateTranscriptWordCount(finalTranscript);
+      });
+    }
+
+  } else {
+    // Web Speech API not supported in browser
+    if (btnMic) {
+      btnMic.title = "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.";
+      btnMic.style.opacity = "0.7";
+      btnMic.addEventListener("click", () => {
+        alert("Speech Recognition is not supported by your browser. Please use Google Chrome, Microsoft Edge, or Safari for voice answering.");
+      });
     }
   }
 
-  // Live word counter and Ctrl+Enter keyboard submission
-  if (answerInput) {
+  // -------------------------------------------------------------
+  // 3. Live Word Counter & Keyboard Shortcuts
+  // -------------------------------------------------------------
+  function triggerWordCounter(inputEl) {
     const wordCountBadge = document.getElementById("wordCountBadge");
+    if (!wordCountBadge || !inputEl) return;
+    const text = inputEl.value.trim();
+    const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+    wordCountBadge.innerText = `${words} word${words === 1 ? "" : "s"}`;
+    if (words >= 30) {
+      wordCountBadge.className = "text-success fw-bold";
+    } else {
+      wordCountBadge.className = "text-secondary fw-semibold";
+    }
+  }
+
+  if (answerInput) {
     answerInput.addEventListener("input", () => {
-      const text = answerInput.value.trim();
-      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
-      if (wordCountBadge) {
-        wordCountBadge.innerText = `${words} word${words === 1 ? "" : "s"}`;
-        if (words >= 30) {
-          wordCountBadge.className = "text-success fw-bold";
-        } else {
-          wordCountBadge.className = "text-secondary fw-semibold";
-        }
-      }
+      triggerWordCounter(answerInput);
     });
 
     answerInput.addEventListener("keydown", (e) => {
@@ -565,29 +810,43 @@ function initMockInterview() {
     });
   }
 
+  // -------------------------------------------------------------
+  // 4. Form Submission & Agent Evaluation Pipeline
+  // -------------------------------------------------------------
   chatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    
-    const answer = answerInput.value.strip ? answerInput.value.strip() : answerInput.value.trim();
+
+    const answer = answerInput.value ? answerInput.value.trim() : "";
     if (!answer) {
-      alert("Please enter a response before submitting.");
+      alert("Please enter or voice-record a response before submitting.");
       return;
+    }
+
+    // Stop active speech recognition or TTS
+    if (recognition && isRecording) {
+      try { recognition.stop(); } catch (err) {}
+      isRecording = false;
+    }
+    if (isSpeechSynthesisSupported) {
+      window.speechSynthesis.cancel();
+      resetSpeakingButtons();
     }
 
     const questionIndex = parseInt(chatForm.getAttribute("data-question-index"));
     const analysisId = chatForm.getAttribute("data-analysis-id");
 
-    // Disable UI inputs
+    // Disable inputs during evaluation
     answerInput.disabled = true;
     submitBtn.disabled = true;
     submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span>`;
 
-    // Append user answer bubble to chat log
+    // Append user answer bubble
     appendChatBubble(answer, "user");
     answerInput.value = "";
+    triggerWordCounter(answerInput);
 
     // Append loader bubble from Interview Agent
-    const loaderBubble = appendChatBubble("<i>Interview Agent is evaluating your response...</i>", "agent");
+    const loaderBubble = appendChatBubble("<i>Interview Agent is evaluating your response and verbal delivery...</i>", "agent");
 
     try {
       const response = await fetch(`/interview/${analysisId}/submit`, {
@@ -603,7 +862,7 @@ function initMockInterview() {
       });
 
       const result = await response.json();
-      loaderBubble.remove(); // Remove wait loading bubble
+      loaderBubble.remove();
 
       if (result.error) {
         appendChatBubble(`Error: ${result.error}`, "agent");
@@ -614,37 +873,76 @@ function initMockInterview() {
       // Display dynamic feedback scores on dashboard panels
       renderEvaluationDetails(result.evaluation, questionIndex + 1);
 
-      // Append feedback bubble to chat log
+      // Construct rich feedback bubble with verbal metrics
+      const evalData = result.evaluation;
+      const verbalClarity = evalData.verbal_clarity_score || evalData.communication_score || 50;
+      let fillersHtml = "";
+      if (evalData.filler_words_detected && evalData.filler_words_detected.length > 0) {
+        fillersHtml = `
+          <div class="small mb-1 text-muted">
+            <i class="fa-solid fa-microphone-lines text-warning me-1"></i> <b>Fillers detected (${evalData.filler_word_count || evalData.filler_words_detected.length}):</b>
+            ${evalData.filler_words_detected.map(fw => `<span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill me-1">${fw}</span>`).join("")}
+          </div>
+        `;
+      }
+
+      let starHtml = "";
+      if (evalData.star_method_analysis && evalData.star_method_analysis.feedback) {
+        starHtml = `
+          <div class="small mb-2 text-secondary">
+            <i class="fa-solid fa-sitemap text-primary me-1"></i> <b>STAR Framework:</b> ${evalData.star_method_analysis.feedback}
+          </div>
+        `;
+      }
+
       const feedbackText = `
-        <b>Feedback:</b> ${result.evaluation.feedback}<br/>
-        <b>Technical Accuracy:</b> ${result.evaluation.technical_accuracy}/100<br/>
-        <b>Communication Score:</b> ${result.evaluation.communication_score}/100<br/>
-        <b>Confidence Score:</b> ${result.evaluation.confidence_score}/100<br/>
+        <b>Feedback:</b> ${evalData.feedback}<br/>
+        <div class="row g-2 mt-2 mb-2">
+          <div class="col-sm-4"><span class="badge bg-primary-subtle text-primary border border-primary-subtle w-100 py-1">Tech: ${evalData.technical_accuracy}/100</span></div>
+          <div class="col-sm-4"><span class="badge bg-success-subtle text-success border border-success-subtle w-100 py-1">Comm: ${evalData.communication_score}/100</span></div>
+          <div class="col-sm-4"><span class="badge bg-info-subtle text-info border border-info-subtle w-100 py-1">Verbal Clarity: ${verbalClarity}/100</span></div>
+        </div>
+        ${fillersHtml}
+        ${starHtml}
         <b>Suggestions:</b><br/>
-        <ul>
-          ${result.evaluation.suggestions.map(s => `<li>${s}</li>`).join("")}
+        <ul class="mb-0 mt-1">
+          ${(evalData.suggestions || []).map(s => `<li>${s}</li>`).join("")}
         </ul>
       `;
       appendChatBubble(feedbackText, "agent");
 
       if (result.completed) {
         appendChatBubble("<b>Congratulations! You have completed all mock interview questions.</b><br/>Please review your performance summary and export your transcript.", "agent");
-        resetInputs(true); // Disable form inputs permanently
+        resetInputs(true);
         document.getElementById("btnBackToDashboard")?.classList.remove("btn-outline-secondary");
         document.getElementById("btnBackToDashboard")?.classList.add("btn-primary");
 
-        // Display completion modal if summary data is available
         if (result.summary) {
           showCompletionModal(result.summary);
         }
       } else {
-        // Move to next question
+        // Move to next question with TTS vocalization
         const nextQ = result.next_question;
         setTimeout(() => {
-          appendChatBubble(`[<b>Question ${nextQ.index + 1} - ${nextQ.type}</b>]<br/>${nextQ.question}`, "agent");
+          const nextBubbleHtml = `
+            <div class="d-flex justify-content-between align-items-start mb-1">
+              <span>[<b>Question ${nextQ.index + 1} - ${nextQ.type}</b>]</span>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-tts py-0 px-2 rounded-pill" title="Read question aloud" data-tts="${nextQ.question.replace(/"/g, '&quot;')}">
+                <i class="fa-solid fa-volume-high me-1"></i> Listen
+              </button>
+            </div>
+            <div>${nextQ.question}</div>
+          `;
+          const newBubble = appendChatBubble(nextBubbleHtml, "agent");
           chatForm.setAttribute("data-question-index", nextQ.index);
           resetInputs();
-        }, 1200);
+
+          // Auto-read question aloud if toggle is checked
+          if (toggleAutoTTS && toggleAutoTTS.checked) {
+            const newTtsBtn = newBubble.querySelector(".btn-tts");
+            speakQuestionText(nextQ.question, newTtsBtn);
+          }
+        }, 1000);
       }
 
     } catch (err) {
@@ -674,20 +972,54 @@ function initMockInterview() {
       evaluationPanel.classList.remove("d-none");
     }
 
-    // Update gauges
-    document.getElementById("confScore").innerText = `${evaluation.confidence_score}%`;
-    document.getElementById("confBar").style.width = `${evaluation.confidence_score}%`;
+    // Gauges
+    const conf = evaluation.confidence_score || 0;
+    const comm = evaluation.communication_score || 0;
+    const tech = evaluation.technical_accuracy || 0;
+    const verbal = evaluation.verbal_clarity_score || comm || 0;
 
-    document.getElementById("commScore").innerText = `${evaluation.communication_score}%`;
-    document.getElementById("commBar").style.width = `${evaluation.communication_score}%`;
+    const confScoreEl = document.getElementById("confScore");
+    const confBarEl = document.getElementById("confBar");
+    if (confScoreEl) confScoreEl.innerText = `${conf}%`;
+    if (confBarEl) confBarEl.style.width = `${conf}%`;
 
-    document.getElementById("techScore").innerText = `${evaluation.technical_accuracy}%`;
-    document.getElementById("techBar").style.width = `${evaluation.technical_accuracy}%`;
+    const commScoreEl = document.getElementById("commScore");
+    const commBarEl = document.getElementById("commBar");
+    if (commScoreEl) commScoreEl.innerText = `${comm}%`;
+    if (commBarEl) commBarEl.style.width = `${comm}%`;
 
+    const techScoreEl = document.getElementById("techScore");
+    const techBarEl = document.getElementById("techBar");
+    if (techScoreEl) techScoreEl.innerText = `${tech}%`;
+    if (techBarEl) techBarEl.style.width = `${tech}%`;
+
+    const verbalScoreEl = document.getElementById("verbalScore");
+    const verbalBarEl = document.getElementById("verbalBar");
+    if (verbalScoreEl) verbalScoreEl.innerText = `${verbal}%`;
+    if (verbalBarEl) verbalBarEl.style.width = `${verbal}%`;
+
+    // Verbal indicators card
+    const fillerWordsText = document.getElementById("fillerWordsText");
+    if (fillerWordsText) {
+      if (evaluation.filler_words_detected && evaluation.filler_words_detected.length > 0) {
+        fillerWordsText.innerText = `${evaluation.filler_word_count || evaluation.filler_words_detected.length} (${evaluation.filler_words_detected.join(", ")})`;
+      } else {
+        fillerWordsText.innerText = "None detected (Clean pacing)";
+      }
+    }
+
+    const starStructureText = document.getElementById("starStructureText");
+    if (starStructureText) {
+      starStructureText.innerText = evaluation.star_method_analysis?.feedback || "Structured response recorded";
+    }
+
+    // Progress updates
     const totalQuestions = parseInt(chatForm.getAttribute("data-total-questions")) || 15;
     const progPercent = totalQuestions > 0 ? Math.round((totalAnswered / totalQuestions) * 100) : 0;
-    document.getElementById("interviewProgressText").innerText = `${totalAnswered}/${totalQuestions} Questions Answered (${progPercent}%)`;
-    document.getElementById("interviewProgressBar").style.width = `${progPercent}%`;
+    const progressTextEl = document.getElementById("interviewProgressText");
+    const progressBarEl = document.getElementById("interviewProgressBar");
+    if (progressTextEl) progressTextEl.innerText = `${totalAnswered}/${totalQuestions} Questions Answered (${progPercent}%)`;
+    if (progressBarEl) progressBarEl.style.width = `${progPercent}%`;
   }
 
   function showCompletionModal(summary) {
@@ -709,6 +1041,19 @@ function initMockInterview() {
     if (hrScoreEl && cats.HR) hrScoreEl.innerText = `${cats.HR.average_score}%`;
     if (techScoreEl && cats.Technical) techScoreEl.innerText = `${cats.Technical.average_score}%`;
     if (behScoreEl && cats.Behavioral) behScoreEl.innerText = `${cats.Behavioral.average_score}%`;
+
+    // Display Verbal Performance Metrics in Modal if available
+    const modalVerbalStatsCard = document.getElementById("modalVerbalStatsCard");
+    const modalVerbalClarity = document.getElementById("modalVerbalClarity");
+    const modalTotalFillers = document.getElementById("modalTotalFillers");
+    const modalStarRate = document.getElementById("modalStarRate");
+
+    if (summary.verbal_metrics && modalVerbalStatsCard) {
+      modalVerbalStatsCard.classList.remove("d-none");
+      if (modalVerbalClarity) modalVerbalClarity.innerText = `${summary.verbal_metrics.average_verbal_clarity}%`;
+      if (modalTotalFillers) modalTotalFillers.innerText = `${summary.verbal_metrics.total_filler_words}`;
+      if (modalStarRate) modalStarRate.innerText = `${summary.verbal_metrics.star_adherence_rate}`;
+    }
 
     const bsModal = new bootstrap.Modal(modalEl);
     bsModal.show();

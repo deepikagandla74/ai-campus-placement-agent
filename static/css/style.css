@@ -430,6 +430,126 @@ body {
   color: #e6edf3;
 }
 
+/* Voice-Enabled Mock Interview Styles */
+.voice-recording-card {
+  background: #fdfdfd;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.recording-pulse {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ea4335;
+  box-shadow: 0 0 0 0 rgba(234, 67, 53, 0.7);
+  animation: recPulse 1.4s infinite;
+}
+
+@keyframes recPulse {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(234, 67, 53, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(234, 67, 53, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(234, 67, 53, 0);
+  }
+}
+
+.voice-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 4px;
+}
+
+.voice-waveform .wave-bar {
+  display: block;
+  width: 3px;
+  height: 6px;
+  background-color: var(--primary-blue);
+  border-radius: 2px;
+  transition: height 0.15s ease;
+}
+
+.voice-waveform.active .wave-bar {
+  animation: soundWave 1.2s ease-in-out infinite;
+}
+
+.voice-waveform.active .wave-bar:nth-child(1) { animation-delay: 0.1s; }
+.voice-waveform.active .wave-bar:nth-child(2) { animation-delay: 0.3s; }
+.voice-waveform.active .wave-bar:nth-child(3) { animation-delay: 0.5s; }
+.voice-waveform.active .wave-bar:nth-child(4) { animation-delay: 0.2s; }
+.voice-waveform.active .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+.voice-waveform.active .wave-bar:nth-child(6) { animation-delay: 0.6s; }
+.voice-waveform.active .wave-bar:nth-child(7) { animation-delay: 0.25s; }
+.voice-waveform.active .wave-bar:nth-child(8) { animation-delay: 0.45s; }
+
+@keyframes soundWave {
+  0%, 100% { height: 4px; }
+  50% { height: 22px; }
+}
+
+.live-transcript-box {
+  min-height: 56px;
+  max-height: 140px;
+  overflow-y: auto;
+  line-height: 1.5;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.live-transcript-box:focus {
+  border-color: var(--primary-blue) !important;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.15);
+}
+
+.live-transcript-box[placeholder]:empty:before {
+  content: attr(placeholder);
+  color: #9aa0a6;
+  cursor: text;
+}
+
+.btn-tts {
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.btn-tts.speaking {
+  background-color: #e8f0fe !important;
+  color: var(--primary-blue) !important;
+  border-color: var(--primary-blue) !important;
+  animation: pulse-speaking 1s infinite alternate;
+}
+
+@keyframes pulse-speaking {
+  from { opacity: 0.8; }
+  to { opacity: 1; transform: scale(1.05); }
+}
+
+[data-bs-theme="dark"] .voice-recording-card {
+  background: #161b22;
+  border-color: #30363d !important;
+}
+
+[data-bs-theme="dark"] .live-transcript-box {
+  background-color: #0d1117 !important;
+  border-color: #30363d !important;
+  color: #e6edf3;
+}
+
+[data-bs-theme="dark"] #verbalDetailsCard {
+  background-color: #21262d !important;
+  border-color: #30363d !important;
+  color: #e6edf3;
 /* ==========================================================================
    Mobile Responsiveness & Touch Target Optimizations (#79)
    ========================================================================== */
