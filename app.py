@@ -18,7 +18,14 @@ from utils.database import (
     get_interview_session,
     update_interview_session
 )
-from utils.pdf_reader import extract_text_from_pdf, validate_resume_text, MAX_RESUME_TEXT_CHARS
+from utils.pdf_reader import (
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    extract_text_from_file,
+    validate_resume_text,
+    MAX_RESUME_TEXT_CHARS,
+    ALLOWED_RESUME_EXTENSIONS,
+)
 from utils.report_generator import generate_pdf_report
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
@@ -144,17 +151,24 @@ def analyze():
             extracted_resume_text = pasted_text[:MAX_RESUME_TEXT_CHARS]
             resume_filename = "Pasted_Resume.txt"
         elif uploaded_file and uploaded_file.filename != "":
-            if not uploaded_file.filename.lower().endswith(".pdf"):
-                flash("Invalid file format. Only PDF resumes are supported.", "error")
+            filename_lower = uploaded_file.filename.lower()
+            if not any(filename_lower.endswith(ext) for ext in ALLOWED_RESUME_EXTENSIONS):
+                flash(
+                    "Invalid file format. Only PDF (.pdf) and Word (.docx) resumes are supported.",
+                    "error",
+                )
                 return redirect(url_for("index"))
             resume_filename = uploaded_file.filename
             safe_name = secure_filename(f"{file_uuid}_{uploaded_file.filename}")
             saved_file_path = os.path.join(config.UPLOAD_FOLDER, safe_name)
             uploaded_file.save(saved_file_path)
             logger.info(f"Uploaded resume saved locally at: {saved_file_path}")
-            extracted_resume_text = extract_text_from_pdf(saved_file_path)
+            extracted_resume_text = extract_text_from_file(saved_file_path)
         else:
-            flash("Please upload a PDF resume or paste your resume text.", "error")
+            flash(
+                "Please upload a PDF or DOCX resume, or paste your resume text.",
+                "error",
+            )
             return redirect(url_for("index"))
 
         selected_company = request.form.get("company", "General").strip()

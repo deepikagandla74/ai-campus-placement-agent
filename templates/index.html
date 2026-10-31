@@ -77,7 +77,7 @@
                 <ul class="nav nav-pills nav-fill mb-2" id="resumeTab" role="tablist">
                   <li class="nav-item" role="presentation">
                     <button class="nav-link active py-2" id="pdf-tab" data-bs-toggle="pill" data-bs-target="#pdf-pane" type="button" role="tab">
-                      <i class="fa-solid fa-file-pdf me-1"></i> Upload PDF
+                      <i class="fa-solid fa-file-arrow-up me-1"></i> Upload PDF / DOCX
                     </button>
                   </li>
                   <li class="nav-item" role="presentation">
@@ -90,10 +90,10 @@
                 <div class="tab-content">
                   <div class="tab-pane fade show active" id="pdf-pane" role="tabpanel">
                     <div class="upload-area" id="uploadArea">
-                      <i class="fa-solid fa-file-pdf upload-icon"></i>
-                      <p class="mb-1 fw-medium text-dark">Drag and drop your PDF resume here, or click to browse</p>
-                      <span class="text-muted small">Supports text-based PDF format</span>
-                      <input type="file" name="resume" id="resumeInput" accept=".pdf" class="d-none">
+                      <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                      <p class="mb-1 fw-medium text-dark">Drag and drop your PDF or DOCX resume here, or click to browse</p>
+                      <span class="text-muted small">Supports text-based .pdf and .docx formats</span>
+                      <input type="file" name="resume" id="resumeInput" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="d-none">
                     </div>
                   </div>
                   <div class="tab-pane fade" id="text-pane" role="tabpanel">

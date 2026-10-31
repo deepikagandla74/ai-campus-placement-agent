@@ -243,7 +243,11 @@ function initFormUpload() {
     
     fileInput.addEventListener("change", () => {
       if (fileInput.files.length > 0) {
-        uploadArea.querySelector("p").innerHTML = `Selected File: <b>${fileInput.files[0].name}</b>`;
+        const file = fileInput.files[0];
+        const lowerName = file.name.toLowerCase();
+        const isDocx = lowerName.endsWith(".docx");
+        const iconClass = isDocx ? "fa-file-word text-primary" : "fa-file-pdf text-danger";
+        uploadArea.querySelector("p").innerHTML = `<i class="fa-solid ${iconClass} me-2"></i>Selected File: <b>${file.name}</b>`;
         uploadArea.style.borderColor = "var(--primary-blue)";
         uploadArea.style.backgroundColor = "var(--secondary-light)";
       }
@@ -270,11 +274,17 @@ function initFormUpload() {
     uploadArea.addEventListener("drop", (e) => {
       const dt = e.dataTransfer;
       const files = dt.files;
-      if (files.length > 0 && files[0].name.toLowerCase().endsWith(".pdf")) {
-        fileInput.files = files;
-        uploadArea.querySelector("p").innerHTML = `Selected File: <b>${files[0].name}</b>`;
-        uploadArea.style.borderColor = "var(--primary-blue)";
-        uploadArea.style.backgroundColor = "var(--secondary-light)";
+      if (files.length > 0) {
+        const file = files[0];
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith(".pdf") || lowerName.endsWith(".docx")) {
+          fileInput.files = files;
+          const isDocx = lowerName.endsWith(".docx");
+          const iconClass = isDocx ? "fa-file-word text-primary" : "fa-file-pdf text-danger";
+          uploadArea.querySelector("p").innerHTML = `<i class="fa-solid ${iconClass} me-2"></i>Selected File: <b>${file.name}</b>`;
+          uploadArea.style.borderColor = "var(--primary-blue)";
+          uploadArea.style.backgroundColor = "var(--secondary-light)";
+        }
       }
     });
   }
@@ -286,7 +296,7 @@ function initFormUpload() {
     const hasText = textInput && textInput.value.trim().length > 0;
 
     if (!hasFile && !hasText) {
-      alert("Please upload a PDF resume or paste your resume text first.");
+      alert("Please upload a PDF or DOCX resume, or paste your resume text first.");
       e.preventDefault();
       return;
     }
