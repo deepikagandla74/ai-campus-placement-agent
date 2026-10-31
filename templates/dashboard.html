@@ -345,17 +345,11 @@
 
     <!-- Learning Roadmap Timeline -->
     <div class="card glass-card p-4 border-0 mb-4">
-      <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <h4 class="fw-bold mb-0"><i class="fa-solid fa-route text-primary me-2"></i> 6-Week Learning Roadmap</h4>
-        <div class="d-flex align-items-center gap-3">
-          <div class="small text-secondary">
-            <span>Overall Syllabus Progress: </span>
-            <span id="overallRoadmapProgressLabel" class="fw-bold text-success">0%</span>
-          </div>
-          <div class="progress rounded-pill" style="width: 140px; height: 10px;">
-            <div id="overallRoadmapProgressBar" class="progress-bar bg-success" style="width: 0%"></div>
-          </div>
-        </div>
+        <button id="btnExportRoadmapMarkdown" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+          <i class="fa-solid fa-download me-1"></i> Export Study Plan (.md)
+        </button>
       </div>
       <div class="timeline-wrapper">
         {% for w in analysis.results.learning_roadmap %}
@@ -363,7 +357,12 @@
             <div class="card border-0 bg-light p-4 rounded-4 shadow-sm week-card" data-week-id="{{ w.week|replace(' ', '_') }}">
               <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
                 <h5 class="fw-bold mb-0 text-primary">{{ w.week }}</h5>
-                <span class="badge bg-primary text-white rounded-pill py-2 px-3">{{ w.estimated_hours }} Hours recommended</span>
+                <div class="d-flex align-items-center gap-2">
+                  <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 copy-week-btn" data-week-name="{{ w.week }}" title="Copy week tasks to clipboard">
+                    <i class="fa-regular fa-copy me-1"></i> Copy Week
+                  </button>
+                  <span class="badge bg-primary text-white rounded-pill py-2 px-3">{{ w.estimated_hours }} Hours recommended</span>
+                </div>
               </div>
               <div class="week-progress-container mb-3">
                 <div class="d-flex justify-content-between small text-secondary mb-1">

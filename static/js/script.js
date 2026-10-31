@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initMockInterview();
   initCompanyExplorer();
   initSkillGapFilter();
-  initRecentAnalysesDrawer();
+  initRoadmapExport();
 });
 
 function initThemeToggle() {
@@ -592,103 +592,110 @@ function initMockInterview() {
 }
 
 /**
- * Loads recent analyses from /api/analyses/recent and renders them inside the offcanvas drawer.
+ * Enables copying single-week roadmap tasks and exporting the complete 6-week
+ * preparation schedule as a structured Markdown file for study notes or Notion.
  */
-function initRecentAnalysesDrawer() {
-  const drawerEl = document.getElementById("offcanvasRecentAnalyses");
-  const listEl = document.getElementById("recentAnalysesList");
-  if (!drawerEl || !listEl) return;
+function initRoadmapExport() {
+  const container = document.getElementById("dashboardContainer");
+  if (!container) return;
 
-  async function loadRecentAnalyses() {
-    listEl.innerHTML = `
-      <div class="text-center py-5 text-muted">
-        <div class="spinner-border text-primary spinner-border-sm mb-2" role="status"></div>
-        <p class="small mb-0">Loading recent evaluations...</p>
-      </div>
-    `;
+  const companyName = container.getAttribute("data-company") || "Placement Target";
 
-    try {
-      const response = await fetch("/api/analyses/recent?limit=10");
-      if (!response.ok) throw new Error("Network response was not ok");
-      const data = await response.json();
+  // 1. Copy individual week tasks
+  document.querySelectorAll(".copy-week-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const card = btn.closest(".week-card");
+      if (!card) return;
 
-      if (!data.analyses || data.analyses.length === 0) {
-        listEl.innerHTML = `
-          <div class="text-center py-5 text-secondary">
-            <i class="fa-solid fa-folder-open fa-2x mb-3 text-muted"></i>
-            <h6 class="fw-bold mb-1">No Recent Analyses</h6>
-            <p class="small text-muted mb-0">Upload a resume to generate your first placement report.</p>
-          </div>
-        `;
-        return;
+      const weekTitle = btn.getAttribute("data-week-name") || "Week";
+      const hours = card.querySelector(".badge")?.innerText || "";
+      let md = `### ${weekTitle} (${hours})\n\n`;
+
+      const appendSection = (heading, selector) => {
+        const items = card.querySelectorAll(selector);
+        if (items.length > 0) {
+          md += `#### ${heading}:\n`;
+          items.forEach((item) => {
+            const text = item.innerText.trim();
+            if (text) md += `- [ ] ${text}\n`;
+          });
+          md += "\n";
+        }
+      };
+
+      appendSection("Topics to Learn", ".roadmap-task-check[data-task-id*='_top_'] + span");
+      appendSection("Coding Practice", ".roadmap-task-check[data-task-id*='_code_'] + span");
+      appendSection("Micro Projects", ".roadmap-task-check[data-task-id*='_proj_'] + span");
+      appendSection("Interview Prep Questions", ".roadmap-task-check[data-task-id*='_q_'] + span");
+
+      const rev = card.querySelector(".border-top p")?.innerText.trim();
+      if (rev) {
+        md += `#### Revision Tasks:\n${rev}\n\n`;
       }
 
-      listEl.innerHTML = "";
-      data.analyses.forEach((a) => {
-        const card = document.createElement("div");
-        card.className = "card border rounded-3 p-3 shadow-sm bg-body";
-        const dateStr = a.created_at ? new Date(a.created_at).toLocaleDateString() : "";
+      try {
+        await navigator.clipboard.writeText(md);
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-success me-1"></i> Copied!';
+        btn.classList.add("btn-success-subtle");
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.classList.remove("btn-success-subtle");
+        }, 2000);
+      } catch (err) {
+        console.warn("Clipboard copy failed, fallback prompted:", err);
+      }
+    });
+  });
 
-        card.innerHTML = `
-          <div class="d-flex justify-content-between align-items-start mb-2">
-            <div>
-              <span class="badge bg-primary-subtle text-primary fw-bold me-1">${escapeHtml(a.company_name)}</span>
-              <span class="badge bg-secondary-subtle text-secondary small">${dateStr}</span>
-            </div>
-            <button class="btn btn-outline-danger btn-sm border-0 rounded-circle delete-analysis-btn" data-id="${a.id}" title="Delete Analysis">
-              <i class="fa-solid fa-trash-can"></i>
-            </button>
-          </div>
-          <div class="small text-truncate fw-semibold mb-2" title="${escapeHtml(a.resume_filename)}">
-            <i class="fa-solid fa-file-pdf text-danger me-1"></i> ${escapeHtml(a.resume_filename)}
-          </div>
-          <div class="d-flex align-items-center gap-2 mb-3 small">
-            <span class="badge bg-success-subtle text-success">ATS: ${a.ats_score}%</span>
-            <span class="badge bg-info-subtle text-info">Match: ${a.match_percentage}%</span>
-          </div>
-          <a href="/dashboard/${a.id}" class="btn btn-sm btn-outline-primary rounded-pill w-100">
-            <i class="fa-solid fa-chart-pie me-1"></i> View Report
-          </a>
-        `;
-        listEl.appendChild(card);
-      });
+  // 2. Export full 6-week study plan as a Markdown file
+  const exportBtn = document.getElementById("btnExportRoadmapMarkdown");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      let fullMd = `# 6-Week Placement Preparation Roadmap\n`;
+      fullMd += `**Target Company:** ${companyName}\n`;
+      fullMd += `**Generated by:** AI Campus Placement Agent\n\n`;
+      fullMd += `---\n\n`;
 
-      // Hook up delete buttons
-      listEl.querySelectorAll(".delete-analysis-btn").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const analysisId = btn.getAttribute("data-id");
-          if (!confirm("Are you sure you want to delete this placement analysis?")) return;
+      document.querySelectorAll(".week-card").forEach((card) => {
+        const title = card.querySelector("h5")?.innerText.trim() || "Week";
+        const hours = card.querySelector(".badge")?.innerText.trim() || "";
+        fullMd += `## ${title} (${hours})\n\n`;
 
-          try {
-            const delRes = await fetch(`/api/analysis/${analysisId}`, { method: "DELETE" });
-            if (delRes.ok) {
-              loadRecentAnalyses();
-            } else {
-              alert("Failed to delete the analysis record.");
-            }
-          } catch (err) {
-            console.error("Error deleting analysis:", err);
-            alert("Error deleting analysis.");
+        const appendSection = (heading, selector) => {
+          const items = card.querySelectorAll(selector);
+          if (items.length > 0) {
+            fullMd += `### ${heading}:\n`;
+            items.forEach((item) => {
+              const text = item.innerText.trim();
+              if (text) fullMd += `- [ ] ${text}\n`;
+            });
+            fullMd += "\n";
           }
-        });
+        };
+
+        appendSection("Topics to Learn", ".roadmap-task-check[data-task-id*='_top_'] + span");
+        appendSection("Coding Practice Tasks", ".roadmap-task-check[data-task-id*='_code_'] + span");
+        appendSection("Micro Projects", ".roadmap-task-check[data-task-id*='_proj_'] + span");
+        appendSection("Interview Prep Questions", ".roadmap-task-check[data-task-id*='_q_'] + span");
+
+        const rev = card.querySelector(".border-top p")?.innerText.trim();
+        if (rev) {
+          fullMd += `### Revision Tasks:\n${rev}\n\n`;
+        }
+        fullMd += `---\n\n`;
       });
-    } catch (err) {
-      console.warn("Could not load recent analyses:", err);
-      listEl.innerHTML = `
-        <div class="text-center py-4 text-muted">
-          <p class="small mb-0">No past sessions found or service unavailable.</p>
-        </div>
-      `;
-    }
+
+      const blob = new Blob([fullMd], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Study_Plan_${companyName.replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
   }
-
-  drawerEl.addEventListener("show.bs.offcanvas", loadRecentAnalyses);
-}
-
-function escapeHtml(text) {
-  if (!text) return "";
-  const div = document.createElement("div");
-  div.innerText = text;
-  return div.innerHTML;
 }
