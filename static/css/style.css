@@ -145,18 +145,33 @@ body {
   text-align: center;
   background: #ffffff;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
-.upload-area:hover {
+.upload-area:hover,
+.upload-area.dragover-active {
   border-color: var(--primary-blue);
   background: var(--secondary-light);
+  transform: scale(1.01);
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.15);
+}
+
+.upload-area.border-danger {
+  border-color: var(--danger-red) !important;
+  box-shadow: 0 4px 16px rgba(234, 67, 53, 0.15);
+}
+
+.upload-area.dragover-active .upload-icon {
+  transform: translateY(-4px) scale(1.1);
+  transition: transform 0.2s ease;
 }
 
 .upload-icon {
   font-size: 3rem;
   color: var(--primary-blue);
   margin-bottom: 15px;
+  transition: transform 0.3s ease, color 0.3s ease;
 }
 
 /* Step-by-Step Agent Progress Overlay */
@@ -413,4 +428,186 @@ body {
   background-color: #0d1117;
   border-color: #30363d;
   color: #e6edf3;
+}
+
+/* ==========================================================================
+   Mobile Responsiveness & Touch Target Optimizations (#79)
+   ========================================================================== */
+
+/* Viewport and container overflow protections */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.container, .container-fluid {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Responsive typography & Spacing scales */
+@media (max-width: 991.98px) {
+  .hero-section {
+    padding: 40px 0 30px 0;
+  }
+  
+  .hero-title {
+    font-size: 2.25rem;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .hero-subtitle {
+    font-size: 1.05rem;
+    text-align: center;
+    margin-bottom: 25px;
+  }
+
+  .navbar-brand-custom {
+    font-size: 1.25rem;
+  }
+
+  /* Make sure floating cards fit smoothly */
+  .glass-card {
+    border-radius: var(--border-radius-sm);
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* Prevent horizontal overflowing on tables and code blocks */
+  .table-responsive,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+  }
+
+  .hero-title {
+    font-size: 1.85rem;
+  }
+
+  .hero-subtitle {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  /* Form & Interactive inputs: Enforce >= 44px touch targets to prevent zooming and mis-taps */
+  .form-control,
+  .form-select,
+  .btn,
+  .nav-pills .nav-link {
+    min-height: 44px;
+    font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+    touch-action: manipulation;
+  }
+
+  .btn-custom-primary,
+  .btn-custom-outline {
+    width: 100%;
+    margin-top: 8px;
+    padding: 12px 20px;
+    font-size: 1rem;
+  }
+
+  /* Upload drop area padding adjustment on phones */
+  .upload-area {
+    padding: 24px 15px;
+    min-height: 140px;
+  }
+
+  .upload-icon {
+    font-size: 2.25rem;
+    margin-bottom: 8px;
+  }
+
+  .upload-area p {
+    font-size: 0.95rem;
+  }
+
+  /* Score Gauges in dashboard */
+  .circular-progress-container {
+    width: 120px;
+    height: 120px;
+  }
+
+  .circular-progress-svg {
+    width: 120px;
+    height: 120px;
+  }
+
+  .circular-progress-text {
+    font-size: 1.4rem;
+  }
+
+  /* Chat window adjustments */
+  .chat-window {
+    height: 380px !important;
+    padding: 12px;
+  }
+
+  .chat-bubble {
+    max-width: 90% !important;
+    font-size: 0.92rem;
+    padding: 10px 14px;
+  }
+
+  /* Progress overlay responsiveness */
+  .progress-panel {
+    padding: 24px 16px !important;
+    max-width: 95% !important;
+    margin: 0 auto;
+  }
+
+  .progress-panel h3 {
+    font-size: 1.35rem;
+  }
+
+  .progress-steps-list {
+    padding-left: 0;
+    font-size: 0.88rem;
+  }
+
+  /* Nav Pills scrollable or wrapped cleanly */
+  .nav-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .nav-pills .nav-item {
+    flex: 1 1 auto;
+  }
+
+  .nav-pills .nav-link {
+    text-align: center;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+
+  /* Benchmark and Readiness cards */
+  .benchmark-card,
+  .readiness-metric-card {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .hero-title {
+    font-size: 1.6rem;
+  }
+  
+  .navbar-brand-custom {
+    font-size: 1.1rem;
+    gap: 4px;
+  }
+
+  .navbar-brand-custom span {
+    display: none; /* Hide secondary text on extra small devices to prevent wrapping */
+  }
+
+  .btn {
+    font-size: 0.88rem;
+    padding: 8px 14px;
+  }
 }

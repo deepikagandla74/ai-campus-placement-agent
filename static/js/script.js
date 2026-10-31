@@ -236,11 +236,118 @@ function initFormUpload() {
   const fileInput = document.getElementById("resumeInput");
   const uploadArea = document.getElementById("uploadArea");
   const progressOverlay = document.getElementById("progressOverlay");
+  const fileFeedbackBadge = document.getElementById("fileFeedbackBadge");
+  const fileFeedbackBadgeText = document.getElementById("fileFeedbackBadgeText");
+  const uploadTypeErrorAlert = document.getElementById("uploadTypeErrorAlert");
+  const uploadTypeErrorMessage = document.getElementById("uploadTypeErrorMessage");
+  const btnRemoveFile = document.getElementById("btnRemoveFile");
+  const uploadIcon = document.getElementById("uploadIcon");
+  const uploadPromptText = document.getElementById("uploadPromptText");
+  const uploadSubText = document.getElementById("uploadSubText");
 
-  // Highlight upload area on dragover
+  // Format file size nicely
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  // Helper to validate and display feedback for chosen resume file
+  const handleSelectedFile = (file) => {
+    if (!file) return;
+
+    const fileName = file.name || "";
+    const lowerName = fileName.toLowerCase();
+    const isPdf = lowerName.endsWith(".pdf");
+    const isDocx = lowerName.endsWith(".docx");
+
+    // Hide any previous error
+    if (uploadTypeErrorAlert) {
+      uploadTypeErrorAlert.classList.add("d-none");
+    }
+
+    if (!isPdf && !isDocx) {
+      // Show explicit unsupported error alert
+      if (uploadTypeErrorAlert && uploadTypeErrorMessage) {
+        uploadTypeErrorMessage.textContent = `Unsupported file type "${fileName.split('.').pop() || 'unknown'}". Only .pdf and .docx resume files are supported.`;
+        uploadTypeErrorAlert.classList.remove("d-none");
+      }
+      uploadArea.classList.add("border-danger");
+      uploadArea.style.backgroundColor = "#fff8f8";
+      // Clear input
+      if (fileInput) fileInput.value = "";
+      if (fileFeedbackBadge) fileFeedbackBadge.classList.add("d-none");
+      return false;
+    }
+
+    // Success styling and visual feedback badge
+    uploadArea.classList.remove("border-danger");
+    uploadArea.style.borderColor = "var(--primary-blue)";
+    uploadArea.style.backgroundColor = "var(--secondary-light)";
+
+    const iconClass = isDocx ? "fa-file-word text-primary" : "fa-file-pdf text-danger";
+    if (uploadIcon) {
+      uploadIcon.className = `fa-solid ${iconClass} upload-icon`;
+    }
+
+    if (uploadPromptText) {
+      uploadPromptText.innerHTML = `Ready for analysis: <b>${fileName}</b>`;
+    }
+
+    if (uploadSubText) {
+      uploadSubText.textContent = `File size: ${formatFileSize(file.size)}`;
+    }
+
+    if (fileFeedbackBadge && fileFeedbackBadgeText) {
+      fileFeedbackBadgeText.innerHTML = `<i class="fa-solid ${iconClass} me-1"></i> ${fileName} (${formatFileSize(file.size)})`;
+      fileFeedbackBadge.classList.remove("d-none");
+    }
+
+    return true;
+  };
+
+  // Helper to reset upload area to clean default state
+  const resetUploadArea = () => {
+    if (fileInput) fileInput.value = "";
+    if (uploadArea) {
+      uploadArea.style.borderColor = "var(--border-color)";
+      uploadArea.style.backgroundColor = "#ffffff";
+      uploadArea.classList.remove("border-danger", "dragover-active");
+    }
+    if (uploadIcon) {
+      uploadIcon.className = "fa-solid fa-cloud-arrow-up upload-icon";
+    }
+    if (uploadPromptText) {
+      uploadPromptText.textContent = "Drag and drop your resume here, or click to browse";
+    }
+    if (uploadSubText) {
+      uploadSubText.textContent = "Supports .pdf and .docx documents (max 10MB)";
+    }
+    if (fileFeedbackBadge) {
+      fileFeedbackBadge.classList.add("d-none");
+    }
+    if (uploadTypeErrorAlert) {
+      uploadTypeErrorAlert.classList.add("d-none");
+    }
+  };
+
+  // Highlight upload area on drag events and file change
   if (uploadArea && fileInput) {
-    uploadArea.addEventListener("click", () => fileInput.click());
-    
+    uploadArea.addEventListener("click", (e) => {
+      // Don't trigger browse if clicking the remove button
+      if (e.target.closest("#btnRemoveFile")) return;
+      fileInput.click();
+    });
+
+    if (btnRemoveFile) {
+      btnRemoveFile.addEventListener("click", (e) => {
+        e.stopPropagation();
+        resetUploadArea();
+      });
+    }
+
     fileInput.addEventListener("change", () => {
       if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
@@ -256,14 +363,18 @@ function initFormUpload() {
     ["dragenter", "dragover"].forEach(eventName => {
       uploadArea.addEventListener(eventName, (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        uploadArea.classList.add("dragover-active");
         uploadArea.style.borderColor = "var(--primary-blue)";
         uploadArea.style.backgroundColor = "var(--secondary-light)";
       }, false);
     });
 
-    ["dragleave", "drop"].forEach(eventName => {
+    ["dragleave"].forEach(eventName => {
       uploadArea.addEventListener(eventName, (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        uploadArea.classList.remove("dragover-active");
         if (fileInput.files.length === 0) {
           uploadArea.style.borderColor = "var(--border-color)";
           uploadArea.style.backgroundColor = "#ffffff";
@@ -272,6 +383,9 @@ function initFormUpload() {
     });
 
     uploadArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadArea.classList.remove("dragover-active");
       const dt = e.dataTransfer;
       const files = dt.files;
       if (files.length > 0) {

@@ -195,13 +195,18 @@ def analyze():
         # Redirect user directly to their new placement analysis dashboard
         return redirect(url_for("dashboard", analysis_id=file_uuid))
 
+    except AIAnalysisError as aie:
+        logger.warning(f"AIAnalysisError in analysis workflow: {str(aie)}")
+        flash(aie.user_friendly_message, "error")
+        return redirect(url_for("index"))
     except ValueError as ve:
         logger.warning(f"Validation error in analysis workflow: {str(ve)}")
         flash(str(ve), "error")
         return redirect(url_for("index"))
     except Exception as e:
         logger.error(f"Analysis workflow crashed: {str(e)}")
-        flash(f"Analysis Failed: {str(e)}", "error")
+        friendly_message = format_ai_error_for_user(e)
+        flash(friendly_message, "error")
         return redirect(url_for("index"))
 
 @app.route("/dashboard/<analysis_id>")
