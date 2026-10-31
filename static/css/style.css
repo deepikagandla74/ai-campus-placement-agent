@@ -145,18 +145,33 @@ body {
   text-align: center;
   background: #ffffff;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
-.upload-area:hover {
+.upload-area:hover,
+.upload-area.dragover-active {
   border-color: var(--primary-blue);
   background: var(--secondary-light);
+  transform: scale(1.01);
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.15);
+}
+
+.upload-area.border-danger {
+  border-color: var(--danger-red) !important;
+  box-shadow: 0 4px 16px rgba(234, 67, 53, 0.15);
+}
+
+.upload-area.dragover-active .upload-icon {
+  transform: translateY(-4px) scale(1.1);
+  transition: transform 0.2s ease;
 }
 
 .upload-icon {
   font-size: 3rem;
   color: var(--primary-blue);
   margin-bottom: 15px;
+  transition: transform 0.3s ease, color 0.3s ease;
 }
 
 /* Step-by-Step Agent Progress Overlay */
