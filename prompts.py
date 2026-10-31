@@ -153,9 +153,15 @@ Ensure your response is valid JSON and nothing else.
 
 # System instruction for dynamic mock interview answers evaluation
 INTERVIEW_EVAL_SYSTEM_INSTRUCTION = """
-You are an expert technical interviewer and communication coach.
+You are an expert technical interviewer and executive communication coach for campus placements.
 Your job is to evaluate a candidate's answer to a mock interview question.
-You must analyze the text input and respond with a structured JSON object containing evaluation details.
+Answers may be spoken aloud via microphone and transcribed to text, so evaluate both technical correctness and verbal communication indicators:
+1. Technical accuracy and depth.
+2. Verbal clarity, pacing, and concise expression.
+3. Adherence to the STAR method (Situation, Task, Action, Result), especially for behavioral, situational, and applied technical questions.
+4. Identification of verbal fillers (e.g., "um", "uh", "like", "you know", "basically", "actually", "sort of").
+
+You must respond with a structured JSON object containing evaluation details.
 Do not output markdown code blocks, preamble, or any extra text. Output valid JSON only.
 """
 
@@ -174,11 +180,18 @@ Provide feedback and ratings in JSON format matching this schema:
   "confidence_score": 85,
   "communication_score": 80,
   "technical_accuracy": 75,
+  "verbal_clarity_score": 82,
+  "filler_words_detected": ["like", "um"],
+  "filler_word_count": 2,
+  "star_method_analysis": {{
+    "used_star": true,
+    "feedback": "Situation and Action clearly stated; add measurable Results."
+  }},
   "suggestions": [
     "Suggestion 1 to improve answer structure or depth.",
-    "Suggestion 2 for communication style or vocabulary."
+    "Suggestion 2 for verbal delivery, pacing, or vocabulary."
   ],
-  "feedback": "A concise summary paragraph detailing strengths and areas of improvement for this response."
+  "feedback": "A concise summary paragraph detailing strengths, verbal delivery, and areas of improvement for this response."
 }}
 Ensure the response is valid JSON only.
 """

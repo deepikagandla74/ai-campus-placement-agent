@@ -40,13 +40,21 @@
       <!-- Chat simulator window (Left 8 columns) -->
       <div class="col-lg-8">
         <div class="card glass-card p-4 border-0">
-          <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h4 class="fw-bold mb-0">
               <i class="fa-solid fa-comments text-primary me-2"></i> Mock Interview Simulator
             </h4>
-            <span class="badge bg-light text-primary border rounded-pill py-2 px-3 small">
-              Target: {{ company_name|default('Placement', true) }}
-            </span>
+            <div class="d-flex align-items-center gap-2">
+              <div class="form-check form-switch mb-0 bg-light border rounded-pill px-3 py-1 d-flex align-items-center gap-2" title="Automatically read questions aloud using AI Voice Synthesis">
+                <input class="form-check-input ms-0 mt-0" type="checkbox" id="toggleAutoTTS" checked>
+                <label class="form-check-label small fw-semibold text-secondary" for="toggleAutoTTS">
+                  <i class="fa-solid fa-volume-high text-primary me-1"></i> Auto-Speak
+                </label>
+              </div>
+              <span class="badge bg-light text-primary border rounded-pill py-2 px-3 small">
+                Target: {{ company_name|default('Placement', true) }}
+              </span>
+            </div>
           </div>
 
           <!-- Interview Round Selection Pills -->
@@ -69,23 +77,49 @@
           <div class="chat-window d-flex flex-column" id="chatContainer">
             <!-- Welcoming message -->
             <div class="chat-bubble chat-bubble-agent">
-              <b>Interview Agent:</b> Welcome to your AI mock placement interview! I have compiled 15 tailored questions (5 HR, 5 Technical, and 5 Behavioral) based on your target company and skills. Speak clearly, explain your logic, and let's practice.
+              <div class="d-flex justify-content-between align-items-start mb-1">
+                <b>Interview Agent:</b>
+                <button type="button" class="btn btn-sm btn-outline-primary btn-tts py-0 px-2 rounded-pill" title="Read message aloud" data-tts="Welcome to your AI mock placement interview! I have compiled 15 tailored questions based on your target company and skills. Speak clearly, explain your logic, and let's practice.">
+                  <i class="fa-solid fa-volume-high me-1"></i> Listen
+                </button>
+              </div>
+              Welcome to your AI mock placement interview! I have compiled 15 tailored questions (5 HR, 5 Technical, and 5 Behavioral) based on your target company and skills. Speak clearly, explain your logic, and let's practice.
             </div>
 
             <!-- Populate history if page refreshed -->
             {% for ans in interview.answers %}
               <div class="chat-bubble chat-bubble-agent">
-                [<b>Question {{ ans.question_index + 1 }} - {{ ans.type }}</b>]<br/>
-                {{ ans.question }}
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <span>[<b>Question {{ ans.question_index + 1 }} - {{ ans.type }}</b>]</span>
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-tts py-0 px-2 rounded-pill" title="Read question aloud" data-tts="{{ ans.question|escape }}">
+                    <i class="fa-solid fa-volume-high me-1"></i> Listen
+                  </button>
+                </div>
+                <div>{{ ans.question }}</div>
               </div>
               <div class="chat-bubble chat-bubble-user">
                 {{ ans.answer }}
               </div>
               <div class="chat-bubble chat-bubble-agent">
                 <b>Feedback:</b> {{ ans.evaluation.feedback }}<br/>
-                <b>Technical Accuracy:</b> {{ ans.evaluation.technical_accuracy }}/100<br/>
-                <b>Communication Score:</b> {{ ans.evaluation.communication_score }}/100<br/>
-                <b>Confidence Score:</b> {{ ans.evaluation.confidence_score }}/100<br/>
+                <div class="row g-2 mt-2 mb-2">
+                  <div class="col-sm-4"><span class="badge bg-primary-subtle text-primary border border-primary-subtle w-100 py-1">Tech: {{ ans.evaluation.technical_accuracy }}/100</span></div>
+                  <div class="col-sm-4"><span class="badge bg-success-subtle text-success border border-success-subtle w-100 py-1">Comm: {{ ans.evaluation.communication_score }}/100</span></div>
+                  <div class="col-sm-4"><span class="badge bg-info-subtle text-info border border-info-subtle w-100 py-1">Verbal Clarity: {{ ans.evaluation.verbal_clarity_score|default(ans.evaluation.communication_score, true) }}/100</span></div>
+                </div>
+                {% if ans.evaluation.filler_words_detected %}
+                  <div class="small mb-1 text-muted">
+                    <i class="fa-solid fa-microphone-lines text-warning me-1"></i> <b>Fillers detected ({{ ans.evaluation.filler_word_count }}):</b>
+                    {% for fw in ans.evaluation.filler_words_detected %}
+                      <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill">{{ fw }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if ans.evaluation.star_method_analysis and ans.evaluation.star_method_analysis.feedback %}
+                  <div class="small mb-2 text-secondary">
+                    <i class="fa-solid fa-sitemap text-primary me-1"></i> <b>STAR Framework:</b> {{ ans.evaluation.star_method_analysis.feedback }}
+                  </div>
+                {% endif %}
                 <b>Suggestions:</b>
                 <ul class="mb-0 mt-1">
                   {% for sug in ans.evaluation.suggestions %}
@@ -98,9 +132,14 @@
             <!-- Display current active question if not completed -->
             {% if not interview.completed %}
               {% set current_q = interview.questions[interview.current_question_index] %}
-              <div class="chat-bubble chat-bubble-agent">
-                [<b>Question {{ current_q.index + 1 }} - {{ current_q.type }}</b>]<br/>
-                {{ current_q.question }}
+              <div class="chat-bubble chat-bubble-agent" id="currentQuestionBubble">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <span>[<b>Question {{ current_q.index + 1 }} - {{ current_q.type }}</b>]</span>
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-tts py-0 px-2 rounded-pill" title="Read question aloud" data-tts="{{ current_q.question|escape }}">
+                    <i class="fa-solid fa-volume-high me-1"></i> Listen
+                  </button>
+                </div>
+                <div id="currentQuestionText">{{ current_q.question }}</div>
               </div>
             {% else %}
               <div class="chat-bubble chat-bubble-agent">
@@ -110,13 +149,63 @@
             {% endif %}
           </div>
 
+          <!-- Voice Recording & Visualizer Panel (Hidden by default, activated on Voice Answer click) -->
+          <div id="voiceRecordingPanel" class="voice-recording-card d-none mb-3 p-3 rounded-4 border bg-light">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+              <div class="d-flex align-items-center gap-2">
+                <span class="recording-pulse"></span>
+                <span class="small fw-bold text-danger" id="recordingStatusText">Listening... Speak clearly into your microphone</span>
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="voice-waveform" id="voiceWaveform">
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                </div>
+                <span class="badge bg-secondary-subtle text-secondary font-monospace" id="speechTimerBadge"><i class="fa-regular fa-clock me-1"></i>00:00</span>
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" id="btnStopVoice">
+                  <i class="fa-solid fa-stop me-1"></i> Stop Recording
+                </button>
+              </div>
+            </div>
+
+            <!-- Live Editable Transcript Review Box -->
+            <div class="mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="fw-semibold text-secondary">
+                  <i class="fa-solid fa-pen-to-square text-primary me-1"></i> Live Transcribed Speech (Editable Review):
+                </small>
+                <small class="text-muted" id="transcriptWordCount">0 words captured</small>
+              </div>
+              <div id="liveInterimText" class="live-transcript-box p-3 rounded-3 border bg-white small" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" placeholder="Speech will appear here in real-time as you speak... You can edit this text directly before inserting."></div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-1">
+              <small class="text-muted"><i class="fa-solid fa-circle-info me-1"></i>Review or fix words above, then click <b>Insert to Answer</b> to formulate your response.</small>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" id="btnClearTranscript">
+                  <i class="fa-solid fa-trash me-1"></i> Clear
+                </button>
+                <button type="button" class="btn btn-primary" id="btnAppendTranscript">
+                  <i class="fa-solid fa-arrow-down me-1"></i> Insert to Answer Field
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Answer Input Form -->
           {% if not interview.completed %}
             <form id="chatForm" data-question-index="{{ interview.current_question_index }}" data-analysis-id="{{ analysis_id }}" data-total-questions="{{ interview.questions|length }}">
               <div class="input-group">
-                <textarea id="answerInput" class="form-control rounded-start-3" rows="3" placeholder="Type your answer here... Be descriptive and structured (STAR method)." aria-label="Type your interview answer"></textarea>
-                <button class="btn btn-outline-secondary px-3" type="button" id="btnMic" title="Voice answering (Speech-to-Text)" aria-label="Voice input toggle">
+                <textarea id="answerInput" class="form-control rounded-start-3" rows="3" placeholder="Type or speak your answer here... Be descriptive and structured (STAR method)." aria-label="Type your interview answer"></textarea>
+                <button class="btn btn-outline-primary px-3 d-flex align-items-center gap-1" type="button" id="btnMic" title="Voice answering (Speech-to-Text)" aria-label="Voice input toggle">
                   <i class="fa-solid fa-microphone"></i>
+                  <span class="d-none d-sm-inline small fw-semibold">Voice Answer</span>
                 </button>
                 <button class="btn btn-custom-primary px-4 rounded-end-3" type="submit" aria-label="Submit interview answer">Submit Answer</button>
               </div>
@@ -195,14 +284,48 @@
             </div>
           </div>
 
+          <!-- Verbal Clarity Gauge -->
+          <div class="mb-4">
+            <div class="d-flex justify-content-between mb-1 small">
+              <span class="fw-semibold">Verbal Articulation:</span>
+              <span class="fw-bold text-info" id="verbalScore">{{ last_eval.verbal_clarity_score if (last_eval and last_eval.verbal_clarity_score is defined) else (last_eval.communication_score if last_eval else 0) }}%</span>
+            </div>
+            <div class="progress rounded-pill" style="height: 8px;">
+              <div id="verbalBar" class="progress-bar bg-info" role="progressbar" style="width: {{ last_eval.verbal_clarity_score if (last_eval and last_eval.verbal_clarity_score is defined) else (last_eval.communication_score if last_eval else 0) }}%"></div>
+            </div>
+          </div>
+
           <!-- Confidence Gauge -->
-          <div class="mb-3">
+          <div class="mb-4">
             <div class="d-flex justify-content-between mb-1 small">
               <span class="fw-semibold">Confidence Indicator:</span>
               <span class="fw-bold text-warning" id="confScore">{{ last_eval.confidence_score if last_eval else 0 }}%</span>
             </div>
             <div class="progress rounded-pill" style="height: 8px;">
               <div id="confBar" class="progress-bar bg-warning" role="progressbar" style="width: {{ last_eval.confidence_score if last_eval else 0 }}%"></div>
+            </div>
+          </div>
+
+          <!-- Verbal Indicators & STAR Card -->
+          <div class="p-3 bg-light rounded-3 border mb-2" id="verbalDetailsCard">
+            <div class="small fw-bold text-dark mb-2">
+              <i class="fa-solid fa-microphone-lines text-primary me-1"></i> Verbal Speech Analysis
+            </div>
+            <div class="small text-secondary mb-1">
+              <b>Filler Words:</b> 
+              <span id="fillerWordsText" class="text-dark fw-semibold ms-1">
+                {% if last_eval and last_eval.filler_words_detected %}
+                  {{ last_eval.filler_word_count }} ({{ last_eval.filler_words_detected|join(', ') }})
+                {% else %}
+                  None detected (Clean pacing)
+                {% endif %}
+              </span>
+            </div>
+            <div class="small text-secondary">
+              <b>STAR Structure:</b> 
+              <span id="starStructureText" class="text-dark ms-1">
+                {{ last_eval.star_method_analysis.feedback if (last_eval and last_eval.star_method_analysis) else 'Standard structured answer' }}
+              </span>
             </div>
           </div>
         </div>
@@ -253,6 +376,24 @@
                 <span class="small text-muted fw-semibold">Behavioral Round</span>
                 <h4 class="fw-bold my-1 text-primary" id="modalBehScore">--</h4>
                 <span class="small text-secondary">STAR structure</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Verbal Performance Metrics Row -->
+          <div class="card bg-light border-0 p-3 rounded-3 text-center mb-4 d-none" id="modalVerbalStatsCard">
+            <div class="row g-2 align-items-center">
+              <div class="col-sm-4">
+                <span class="small text-muted d-block">Verbal Articulation</span>
+                <span class="fw-bold text-info fs-5" id="modalVerbalClarity">--</span>
+              </div>
+              <div class="col-sm-4 border-start border-end">
+                <span class="small text-muted d-block">Total Filler Words</span>
+                <span class="fw-bold text-warning fs-5" id="modalTotalFillers">--</span>
+              </div>
+              <div class="col-sm-4">
+                <span class="small text-muted d-block">STAR Adherence</span>
+                <span class="fw-bold text-success fs-5" id="modalStarRate">--</span>
               </div>
             </div>
           </div>
