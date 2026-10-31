@@ -169,3 +169,44 @@ def test_interview_agent_calculate_session_summary():
     assert "Behavioral" in summary["category_scores"]
     assert summary["category_scores"]["Technical"]["technical_accuracy"] == 95
     assert summary["readiness_verdict"] == "Placement Ready"
+    assert "verbal_metrics" in summary
+    assert summary["verbal_metrics"]["average_verbal_clarity"] >= 70
+
+
+def test_interview_agent_evaluate_answer_empty():
+    agent = InterviewAgent()
+    res = agent.evaluate_answer("Technical", "What is OOP?", "")
+    assert res["confidence_score"] == 0
+    assert res["verbal_clarity_score"] == 0
+    assert res["filler_word_count"] == 0
+    assert res["filler_words_detected"] == []
+    assert res["star_method_analysis"]["used_star"] is False
+
+
+def test_interview_agent_evaluate_answer_mocked(monkeypatch):
+    agent = InterviewAgent()
+
+    def mock_generate_json(system_instruction, prompt):
+        return {
+            "confidence_score": 88,
+            "communication_score": 85,
+            "technical_accuracy": 90,
+            "verbal_clarity_score": 86,
+            "filler_words_detected": ["um", "like"],
+            "filler_word_count": 2,
+            "star_method_analysis": {
+                "used_star": True,
+                "feedback": "STAR approach clearly observed with situation and measurable results."
+            },
+            "suggestions": ["Add more technical depth on indexing."],
+            "feedback": "Strong delivery with clear articulation and concise STAR examples."
+        }
+
+    monkeypatch.setattr("agents.interview_agent.generate_json_response", mock_generate_json)
+    res = agent.evaluate_answer("Behavioral", "Tell me about a challenge.", "In my previous project, we faced a deadline crunch...")
+    assert res["confidence_score"] == 88
+    assert res["verbal_clarity_score"] == 86
+    assert res["filler_word_count"] == 2
+    assert "like" in res["filler_words_detected"]
+    assert res["star_method_analysis"]["used_star"] is True
+

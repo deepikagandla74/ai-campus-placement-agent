@@ -96,7 +96,8 @@ class InterviewAgent:
 
     def evaluate_answer(self, question_type: str, question: str, answer: str) -> Dict[str, Any]:
         """
-        Performs a dynamic API evaluation call to score a single answer response.
+        Performs a dynamic API evaluation call to score a single answer response,
+        including verbal communication indicators (clarity, filler words, STAR approach).
         """
         logger.info(f"InterviewAgent: Dynamic response evaluation started for type: '{question_type}'")
 
@@ -105,11 +106,18 @@ class InterviewAgent:
                 "confidence_score": 0,
                 "communication_score": 0,
                 "technical_accuracy": 0,
+                "verbal_clarity_score": 0,
+                "filler_words_detected": [],
+                "filler_word_count": 0,
+                "star_method_analysis": {
+                    "used_star": False,
+                    "feedback": "No answer provided to analyze structure."
+                },
                 "suggestions": [
                     "Answer field was submitted empty.",
                     "Please formulate a response of at least 2-3 sentences."
                 ],
-                "feedback": "The candidate did not provide an answer. Prompt evaluation requires written input."
+                "feedback": "The candidate did not provide an answer. Prompt evaluation requires written or spoken input."
             }
 
         prompt = prompts.INTERVIEW_EVAL_USER_PROMPT_TEMPLATE.format(
@@ -129,11 +137,34 @@ class InterviewAgent:
             conf = self.parse_score(res.get("confidence_score"), 50)
             comm = self.parse_score(res.get("communication_score"), 50)
             tech = self.parse_score(res.get("technical_accuracy"), 50)
+            verbal_clarity = self.parse_score(res.get("verbal_clarity_score"), default=comm)
+
+            # Verbal indicator extraction
+            filler_list = self._sanitize_list(res.get("filler_words_detected"))
+            filler_count = res.get("filler_word_count")
+            if not isinstance(filler_count, int):
+                filler_count = len(filler_list)
+
+            star_data = res.get("star_method_analysis")
+            if not isinstance(star_data, dict):
+                star_data = {
+                    "used_star": False,
+                    "feedback": "Consider structuring experiences using Situation, Task, Action, and Result."
+                }
+            else:
+                star_data = {
+                    "used_star": bool(star_data.get("used_star", False)),
+                    "feedback": str(star_data.get("feedback", "Structured response reviewed."))
+                }
 
             return {
                 "confidence_score": conf,
                 "communication_score": comm,
                 "technical_accuracy": tech,
+                "verbal_clarity_score": verbal_clarity,
+                "filler_words_detected": filler_list,
+                "filler_word_count": filler_count,
+                "star_method_analysis": star_data,
                 "suggestions": self._sanitize_list(res.get("suggestions")) or ["Incorporate clear structured responses (STAR method)."],
                 "feedback": str(res.get("feedback", "Feedback generation completed."))
             }
@@ -144,6 +175,13 @@ class InterviewAgent:
                 "confidence_score": 50,
                 "communication_score": 50,
                 "technical_accuracy": 50,
+                "verbal_clarity_score": 50,
+                "filler_words_detected": [],
+                "filler_word_count": 0,
+                "star_method_analysis": {
+                    "used_star": False,
+                    "feedback": "Evaluation system was unable to evaluate STAR structure."
+                },
                 "suggestions": [
                     "Use quantitative metrics where possible.",
                     "Break down explanations into clear steps."
@@ -170,6 +208,9 @@ class InterviewAgent:
         all_tech = []
         all_comm = []
         all_conf = []
+        all_verbal = []
+        total_filler_words = 0
+        star_used_count = 0
 
         for item in answers_list:
             q_type = str(item.get("type", "Technical")).capitalize()
@@ -181,16 +222,27 @@ class InterviewAgent:
             tech = self.parse_score(eval_data.get("technical_accuracy"), 50)
             comm = self.parse_score(eval_data.get("communication_score"), 50)
             conf = self.parse_score(eval_data.get("confidence_score"), 50)
+            verbal = self.parse_score(eval_data.get("verbal_clarity_score"), comm)
 
             all_tech.append(tech)
             all_comm.append(comm)
             all_conf.append(conf)
+            all_verbal.append(verbal)
+
+            filler_cnt = eval_data.get("filler_word_count", 0)
+            if isinstance(filler_cnt, (int, float)):
+                total_filler_words += int(filler_cnt)
+
+            star_data = eval_data.get("star_method_analysis")
+            if isinstance(star_data, dict) and star_data.get("used_star"):
+                star_used_count += 1
 
             composite = int(round((tech + comm + conf) / 3))
             categories[target_key].append({
                 "tech": tech,
                 "comm": comm,
                 "conf": conf,
+                "verbal": verbal,
                 "composite": composite
             })
 
@@ -212,6 +264,7 @@ class InterviewAgent:
 
         total_ans = len(answers_list)
         overall_avg = int(round((sum(all_tech) + sum(all_comm) + sum(all_conf)) / (total_ans * 3))) if total_ans else 0
+        avg_verbal = int(round(sum(all_verbal) / len(all_verbal))) if all_verbal else 0
 
         # Determine verdict
         if overall_avg >= 80:
@@ -229,5 +282,10 @@ class InterviewAgent:
             "overall_score": overall_avg,
             "category_scores": category_breakdown,
             "readiness_verdict": verdict,
-            "summary_feedback": summary_feedback
+            "summary_feedback": summary_feedback,
+            "verbal_metrics": {
+                "average_verbal_clarity": avg_verbal,
+                "total_filler_words": total_filler_words,
+                "star_adherence_rate": f"{int(round((star_used_count / total_ans) * 100))}%" if total_ans else "0%"
+            }
         }
