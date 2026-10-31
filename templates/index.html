@@ -14,17 +14,17 @@
 <body>
 
   <!-- Navigation -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-3">
-    <div class="container">
-      <a class="navbar-brand navbar-brand-custom" href="/">
-        <i class="fa-solid fa-graduation-cap"></i> AI Campus <span>Placement Agent</span>
+  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-2 py-md-3">
+    <div class="container d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <a class="navbar-brand navbar-brand-custom fs-5 fs-md-4 text-truncate" href="/">
+        <i class="fa-solid fa-graduation-cap"></i> AI Campus <span class="d-inline">Placement Agent</span>
       </a>
-      <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-outline-primary btn-sm rounded-pill px-3" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRecentAnalyses" aria-controls="offcanvasRecentAnalyses" id="btnOpenRecentAnalyses">
-          <i class="fa-solid fa-clock-rotate-left me-1"></i> Recent Analyses
+      <div class="d-flex align-items-center flex-wrap gap-2 ms-auto ms-lg-0">
+        <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 text-nowrap" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRecentAnalyses" aria-controls="offcanvasRecentAnalyses" id="btnOpenRecentAnalyses">
+          <i class="fa-solid fa-clock-rotate-left me-1"></i> <span class="d-none d-sm-inline">Recent</span> Analyses
         </button>
-        <span class="badge bg-light text-primary border border-primary-subtle py-2 px-3 rounded-pill">Open Source Project</span>
-        <button class="btn btn-outline-secondary btn-sm rounded-circle p-2 theme-toggle-btn" title="Toggle theme">
+        <span class="badge bg-light text-primary border border-primary-subtle py-2 px-2 px-sm-3 rounded-pill d-none d-md-inline-block">Open Source</span>
+        <button class="btn btn-outline-secondary btn-sm rounded-circle p-2 theme-toggle-btn" title="Toggle theme" aria-label="Toggle theme mode">
           <i class="fa-solid fa-moon"></i>
         </button>
       </div>
@@ -77,7 +77,7 @@
                 <ul class="nav nav-pills nav-fill mb-2" id="resumeTab" role="tablist">
                   <li class="nav-item" role="presentation">
                     <button class="nav-link active py-2" id="pdf-tab" data-bs-toggle="pill" data-bs-target="#pdf-pane" type="button" role="tab">
-                      <i class="fa-solid fa-file-pdf me-1"></i> Upload PDF
+                      <i class="fa-solid fa-file-arrow-up me-1"></i> Upload PDF / DOCX
                     </button>
                   </li>
                   <li class="nav-item" role="presentation">
@@ -90,10 +90,10 @@
                 <div class="tab-content">
                   <div class="tab-pane fade show active" id="pdf-pane" role="tabpanel">
                     <div class="upload-area" id="uploadArea">
-                      <i class="fa-solid fa-file-pdf upload-icon"></i>
-                      <p class="mb-1 fw-medium text-dark">Drag and drop your PDF resume here, or click to browse</p>
-                      <span class="text-muted small">Supports text-based PDF format</span>
-                      <input type="file" name="resume" id="resumeInput" accept=".pdf" class="d-none">
+                      <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                      <p class="mb-1 fw-medium text-dark">Drag and drop your PDF or DOCX resume here, or click to browse</p>
+                      <span class="text-muted small">Supports text-based .pdf and .docx formats</span>
+                      <input type="file" name="resume" id="resumeInput" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="d-none">
                     </div>
                   </div>
                   <div class="tab-pane fade" id="text-pane" role="tabpanel">
@@ -117,14 +117,14 @@
                     <option value="{{ c }}">{{ c }}</option>
                   {% endfor %}
                 </select>
-                <button type="button" id="btnExploreCompany" class="btn btn-sm btn-outline-primary mt-2 rounded-pill">
+                <button type="button" id="btnExploreCompany" class="btn btn-sm btn-outline-primary mt-2 rounded-pill w-100 w-sm-auto py-2">
                   <i class="fa-solid fa-building me-1"></i> Explore Company Hiring Guide
                 </button>
               </div>
 
               <!-- Submit button -->
-              <button type="submit" class="btn btn-custom-primary w-100 py-3 mt-2 fs-5">
-                <i class="fa-solid fa-wand-magic-sparkles me-2"></i> Analyze Readiness
+              <button type="submit" class="btn btn-custom-primary w-100 py-3 mt-2 fs-5 d-flex align-items-center justify-content-center">
+                <i class="fa-solid fa-wand-magic-sparkles me-2"></i> <span>Analyze Readiness</span>
               </button>
             </form>
           </div>

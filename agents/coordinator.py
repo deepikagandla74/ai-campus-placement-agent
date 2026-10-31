@@ -71,10 +71,20 @@ class CoordinatorAgent:
 
         # 3. Call the Gemini API with structured JSON configs
         logger.info("CoordinatorAgent: Issuing request to Gemini model.")
-        raw_json_response = generate_json_response(
-            system_instruction=prompts.ANALYSIS_SYSTEM_INSTRUCTION,
-            prompt=user_prompt
-        )
+        try:
+            raw_json_response = generate_json_response(
+                system_instruction=prompts.ANALYSIS_SYSTEM_INSTRUCTION,
+                prompt=user_prompt
+            )
+            if not isinstance(raw_json_response, dict):
+                logger.warning(
+                    f"CoordinatorAgent: Unexpected non-dict root JSON response ({type(raw_json_response)}). "
+                    "Applying resilient defaults."
+                )
+                raw_json_response = {}
+        except Exception as api_err:
+            logger.error(f"CoordinatorAgent: AI call failed ({api_err}). Re-raising for user handling.")
+            raise
 
         # 4. Extract data blocks from the root JSON response
         logger.info("CoordinatorAgent: Extracting and delegating JSON payload blocks.")

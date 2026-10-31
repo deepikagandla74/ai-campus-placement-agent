@@ -14,20 +14,20 @@
 <body>
 
   <!-- Navigation -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-3">
-    <div class="container">
-      <a class="navbar-brand navbar-brand-custom" href="/">
-        <i class="fa-solid fa-graduation-cap"></i> AI Campus <span>Placement Agent</span>
+  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-2 py-md-3">
+    <div class="container d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <a class="navbar-brand navbar-brand-custom fs-5 fs-md-4 text-truncate" href="/">
+        <i class="fa-solid fa-graduation-cap"></i> AI Campus <span class="d-inline">Placement Agent</span>
       </a>
-      <div class="d-flex align-items-center gap-2">
-        <a href="/interview/{{ analysis_id }}/export" id="btnExportTranscript" class="btn btn-outline-primary btn-sm rounded-pill px-3" title="Download interview questions and feedback as JSON">
-          <i class="fa-solid fa-file-export me-1"></i> Export Q&A JSON
+      <div class="d-flex align-items-center flex-wrap gap-2 ms-auto ms-lg-0">
+        <a href="/interview/{{ analysis_id }}/export" id="btnExportTranscript" class="btn btn-outline-primary btn-sm rounded-pill px-2 px-sm-3" title="Download interview questions and feedback as JSON">
+          <i class="fa-solid fa-file-export me-1"></i> <span class="d-none d-sm-inline">Export</span> JSON
         </a>
         <button class="btn btn-outline-secondary btn-sm rounded-circle p-2 theme-toggle-btn" title="Toggle theme" aria-label="Toggle dark/light theme">
           <i class="fa-solid fa-moon"></i>
         </button>
-        <a href="/dashboard/{{ analysis_id }}" id="btnBackToDashboard" class="btn btn-outline-secondary btn-sm rounded-pill px-4">
-          <i class="fa-solid fa-gauge me-1"></i> Return to Dashboard
+        <a href="/dashboard/{{ analysis_id }}" id="btnBackToDashboard" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+          <i class="fa-solid fa-gauge me-1"></i> Dashboard
         </a>
       </div>
     </div>
