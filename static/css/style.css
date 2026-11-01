@@ -731,3 +731,22 @@ html, body {
     padding: 8px 14px;
   }
 }
+
+/* ==============================================================================
+   Longitudinal Progress Tracker & Diff Modal Styles
+   ============================================================================== */
+#progressTrendChart {
+  min-height: 200px;
+}
+
+.diff-badge-added {
+  background-color: rgba(52, 168, 83, 0.15);
+  color: var(--success-green);
+  border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.diff-badge-missing {
+  background-color: rgba(234, 67, 53, 0.12);
+  color: var(--danger-red);
+  border: 1px solid rgba(234, 67, 53, 0.25);
+}
