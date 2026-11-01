@@ -9,7 +9,8 @@ encrypted files gracefully, and validating word/character thresholds.
 import io
 import logging
 import os
-from typing import List, Optional, Tuple, Union
+import re
+from typing import Dict, List, Optional, Tuple, Union
 from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
 
@@ -83,10 +84,29 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         cleaned_text = text_content.strip()
         is_valid, validation_msg = validate_resume_text(cleaned_text)
         if not is_valid:
+            logger.warning(
+                f"Extracted PDF text validation failed ({validation_msg}). "
+                "Attempting multimodal OCR fallback via Gemini Vision / OCR engine..."
+            )
+            try:
+                ocr_candidate = extract_text_with_ocr_fallback(pdf_path)
+                ocr_valid, ocr_msg = validate_resume_text(ocr_candidate)
+                if ocr_valid:
+                    logger.info(
+                        f"Multimodal OCR fallback succeeded ({len(ocr_candidate)} characters extracted)."
+                    )
+                    cleaned_text = ocr_candidate
+                    is_valid = True
+                else:
+                    logger.warning(f"OCR fallback yielded insufficient text: {ocr_msg}")
+            except Exception as ocr_err:
+                logger.warning(f"Multimodal OCR fallback encountered error: {ocr_err}")
+
+        if not is_valid:
             logger.warning(f"Extracted PDF text validation failed: {validation_msg}")
             raise ValueError(
                 f"Could not extract sufficient text from PDF: {validation_msg} "
-                "Ensure your document is a text-based PDF rather than a scanned image."
+                "Ensure your document is a readable text-based or scanned PDF resume."
             )
 
         # Enforce maximum character boundary to avoid excessive token consumption
@@ -111,6 +131,67 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     except Exception as e:
         logger.error(f"Unexpected error reading PDF: {str(e)}")
         raise RuntimeError(f"Failed to parse PDF file: {str(e)}")
+
+
+def extract_text_with_ocr_fallback(pdf_path: str) -> str:
+    """
+    Multimodal OCR fallback mechanism using Gemini Vision or pytesseract.
+    Activated when embedded PDF text density is below threshold (e.g. scanned, image-based,
+    or graphical Canva resumes).
+    """
+    logger.info(f"Triggering multimodal OCR fallback for PDF: {pdf_path}")
+
+    # 1. Attempt Gemini Vision multimodal extraction
+    try:
+        from utils.gemini import get_gemini_client
+        import config
+        from google.genai import types
+
+        client = get_gemini_client()
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        logger.info(f"Submitting {len(pdf_bytes)} bytes to Gemini Vision for OCR transcription.")
+        response = client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                (
+                    "You are an expert optical character recognition (OCR) and resume parsing engine. "
+                    "Extract and transcribe all readable text from this scanned or graphical resume document. "
+                    "Preserve all headings, sections (Education, Skills, Experience, Projects, Certifications), "
+                    "bullet points, and dates verbatim. Output clean plain text without any introductory commentary."
+                ),
+            ],
+        )
+        ocr_result = getattr(response, "text", "") or ""
+        if ocr_result and ocr_result.strip():
+            logger.info(f"Gemini Vision OCR extraction succeeded ({len(ocr_result.strip())} chars).")
+            return ocr_result.strip()
+    except Exception as gemini_ocr_err:
+        logger.warning(f"Gemini Vision OCR attempt failed: {gemini_ocr_err}")
+
+    # 2. Attempt pytesseract if installed and available
+    try:
+        import pytesseract
+        from pdf2image import convert_from_path
+
+        logger.info(f"Attempting pytesseract OCR extraction for {pdf_path}")
+        images = convert_from_path(pdf_path, first_page=1, last_page=MAX_PDF_PAGES)
+        tesseract_lines = []
+        for img in images:
+            page_str = pytesseract.image_to_string(img)
+            if page_str.strip():
+                tesseract_lines.append(page_str.strip())
+
+        combined_tess = "\n".join(tesseract_lines).strip()
+        if combined_tess:
+            logger.info(f"pytesseract OCR extraction succeeded ({len(combined_tess)} chars).")
+            return combined_tess
+    except Exception as tess_err:
+        logger.debug(f"pytesseract OCR attempt skipped or failed: {tess_err}")
+
+    return ""
 
 
 def extract_text_from_docx(docx_source: Union[str, io.BytesIO]) -> str:
@@ -227,12 +308,124 @@ def extract_text_from_docx(docx_source: Union[str, io.BytesIO]) -> str:
         raise RuntimeError(f"Failed to parse Word document: {str(e)}")
 
 
-def extract_text_from_file(file_path: str) -> str:
+def standardize_resume_sections(text: str) -> Dict[str, str]:
+    """
+    Parses unstructured or semi-structured resume text into standardized canonical sections:
+    - Education
+    - Technical Skills
+    - Work Experience / Internships
+    - Projects
+    - Certifications & Achievements
+    - Summary & Profile
+
+    Returns a dictionary of {section_name: section_content}.
+    """
+    if not text or not text.strip():
+        return {}
+
+    raw_text = text.strip()
+
+    section_patterns = [
+        ("summary", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:professional summary|executive summary|career objective|about me|summary|objective|profile)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+        ("education", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:education|academic background|academics|qualifications|academic credentials|degrees?)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+        ("skills", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:technical skills|skills & tools|core competencies|skills|technologies|tech stack|key skills|competencies)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+        ("experience", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:work experience|professional experience|experience|employment history|internships|work history|career history)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+        ("projects", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:academic projects|key projects|personal projects|portfolio projects|projects)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+        ("certifications", re.compile(r"(?:^|\n)\s*(?:[#*_\-~=]+\s*)?(?:certifications|certificates|licenses|achievements|awards|honors|publications|extracurricular activities|activities)(?:\s*[:\n]|\s*$)", re.IGNORECASE)),
+    ]
+
+    found_matches = []
+    for sec_key, pattern in section_patterns:
+        for match in pattern.finditer(raw_text):
+            found_matches.append({
+                "key": sec_key,
+                "start": match.start(),
+                "end": match.end(),
+                "matched_text": match.group().strip()
+            })
+
+    found_matches.sort(key=lambda m: m["start"])
+
+    filtered_matches = []
+    last_end = 0
+    for m in found_matches:
+        if m["start"] >= last_end:
+            filtered_matches.append(m)
+            last_end = m["end"]
+
+    sections: Dict[str, str] = {
+        "summary": "",
+        "education": "",
+        "skills": "",
+        "experience": "",
+        "projects": "",
+        "certifications": "",
+    }
+
+    if not filtered_matches:
+        sections["summary"] = raw_text
+        return {k: v for k, v in sections.items() if v}
+
+    first_start = filtered_matches[0]["start"]
+    if first_start > 0:
+        intro_content = raw_text[:first_start].strip()
+        if intro_content:
+            sections["summary"] = intro_content
+
+    for idx, match_info in enumerate(filtered_matches):
+        sec_key = match_info["key"]
+        content_start = match_info["end"]
+        content_end = filtered_matches[idx + 1]["start"] if idx + 1 < len(filtered_matches) else len(raw_text)
+        chunk = raw_text[content_start:content_end].strip()
+
+        if chunk:
+            if sections.get(sec_key):
+                sections[sec_key] += "\n" + chunk
+            else:
+                sections[sec_key] = chunk
+
+    return {k: v.strip() for k, v in sections.items() if v.strip()}
+
+
+def format_standardized_resume(sections: Dict[str, str]) -> str:
+    """
+    Assembles a standardized, cleanly formatted Markdown representation of the resume
+    from structured section blocks for downstream agent consumption.
+    """
+    if not sections:
+        return ""
+
+    label_map = [
+        ("summary", "Contact & Professional Summary"),
+        ("education", "Education & Qualifications"),
+        ("skills", "Technical Skills & Competencies"),
+        ("experience", "Work Experience & Internships"),
+        ("projects", "Key Projects & Portfolio"),
+        ("certifications", "Certifications, Awards & Achievements"),
+    ]
+
+    parts: List[str] = []
+    for key, title in label_map:
+        content = sections.get(key, "").strip()
+        if content:
+            parts.append(f"### {title}\n{content}")
+
+    for key, content in sections.items():
+        if key not in dict(label_map) and content.strip():
+            clean_title = key.replace("_", " ").title()
+            parts.append(f"### {clean_title}\n{content.strip()}")
+
+    return "\n\n".join(parts).strip()
+
+
+def extract_text_from_file(file_path: str, standardize: bool = True) -> str:
     """
     Unified resume text extractor that routes automatically based on file extension (.pdf or .docx).
+    When standardize=True, structures sections into canonical blocks for clean downstream agent consumption.
 
     Parameters:
         file_path: Filesystem path to the resume file.
+        standardize: Whether to standardize and format canonical sections (default True).
 
     Returns:
         Validated text extracted from the document.
@@ -244,10 +437,17 @@ def extract_text_from_file(file_path: str) -> str:
     """
     lower_path = file_path.lower()
     if lower_path.endswith(".pdf"):
-        return extract_text_from_pdf(file_path)
+        raw_text = extract_text_from_pdf(file_path)
     elif lower_path.endswith(".docx"):
-        return extract_text_from_docx(file_path)
+        raw_text = extract_text_from_docx(file_path)
     else:
         raise ValueError(
             "Unsupported file format. Only PDF (.pdf) and Word documents (.docx) are supported."
         )
+
+    if standardize:
+        sections = standardize_resume_sections(raw_text)
+        standardized_text = format_standardized_resume(sections)
+        if standardized_text:
+            return standardized_text
+    return raw_text

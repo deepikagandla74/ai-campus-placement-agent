@@ -26,6 +26,11 @@ from utils.pdf_reader import (
     MAX_RESUME_TEXT_CHARS,
     ALLOWED_RESUME_EXTENSIONS,
 )
+from utils.gemini import (
+    AIAnalysisError,
+    AIRateLimitError,
+    format_ai_error_for_user,
+)
 from utils.report_generator import generate_pdf_report
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
@@ -166,7 +171,7 @@ def analyze():
             extracted_resume_text = extract_text_from_file(saved_file_path)
         else:
             flash(
-                "Please upload a PDF or DOCX resume, or paste your resume text.",
+                "Please upload a PDF resume or paste your resume text.",
                 "error",
             )
             return redirect(url_for("index"))
