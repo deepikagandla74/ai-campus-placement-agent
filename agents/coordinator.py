@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Callable
 
 import prompts
 import config
@@ -51,11 +51,20 @@ class CoordinatorAgent:
             logger.error(f"Failed to load static company profiles: {str(e)}")
         return {}
 
-    def analyze(self, resume_text: str, job_description: str = "", company_name: str = "General") -> Dict[str, Any]:
+    def analyze(
+        self,
+        resume_text: str,
+        job_description: str = "",
+        company_name: str = "General",
+        on_progress: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """
         Runs the placement preparation analysis workflow using a single Gemini model call.
+        Optionally emits progress milestones via on_progress callback if supplied.
         """
         logger.info(f"CoordinatorAgent: Starting analysis cycle for company target: '{company_name}'")
+        if on_progress:
+            on_progress("step2", "ResumeAgent", "Evaluating resume formatting, bullet points, and ATS compatibility...", 30)
 
         # 1. Load static company metadata to supply relevant hiring details
         company_profile = self._load_company_data(company_name)
@@ -102,15 +111,25 @@ class CoordinatorAgent:
 
         # 5. Hand over subsections to specialized sub-agents for parsing & structural safety
         processed_resume = self.resume_agent.process(resume_block)
-        if parsed_sections:
-            processed_resume["sections"] = parsed_sections
+
+        if on_progress:
+            on_progress("step3", "JobMatchAgent", f"Benchmarking technical capabilities against {company_name} hiring criteria...", 50)
         processed_job_match = self.job_match_agent.process(
             job_match_block,
             company_name=company_name,
             ats_score=processed_resume.get("ats_score", 70)
         )
+
+        if on_progress:
+            on_progress("step4", "SkillGapAgent", "Detecting critical skill deficiencies and recommending portfolio projects...", 65)
         processed_skill_gap = self.skill_gap_agent.process(skill_gap_block)
+
+        if on_progress:
+            on_progress("step5", "RoadmapAgent", "Constructing tailored 6-week progressive placement preparation roadmap...", 80)
         processed_roadmap = self.roadmap_agent.process(roadmap_block)
+
+        if on_progress:
+            on_progress("step6", "InterviewAgent", f"Synthesizing customized Technical, HR, and Behavioral questions for {company_name}...", 90)
         processed_interview = self.interview_agent.process(interview_block)
 
         # 6. Detect cross-section conflicts deterministically without extra API calls

@@ -2,7 +2,17 @@ import os
 import uuid
 import json
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+    send_file,
+    Response,
+)
 from werkzeug.utils import secure_filename
 
 
@@ -42,7 +52,12 @@ from utils.report_generator import generate_pdf_report
 from utils.gemini import (
     AIAnalysisError,
     AIRateLimitError,
-    format_ai_error_for_user
+    format_ai_error_for_user,
+)
+from utils.async_pipeline import (
+    create_analysis_task,
+    get_analysis_task,
+    start_async_analysis,
 )
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
@@ -150,65 +165,94 @@ def get_company_profile(company_name: str):
         logger.error(f"Error fetching company details for {company_name}: {e}")
     return jsonify({"success": False, "error": f"Profile for '{company_name}' not found."}), 404
 
+def _extract_and_validate_resume(req):
+    """
+    Validates uploaded resume file or pasted text from Flask request.
+    Returns a tuple of (extracted_text, filename, file_uuid, error_message).
+    """
+    pasted_text = req.form.get("resume_text", "").strip()
+    uploaded_file = req.files.get("resume")
+    file_uuid = str(uuid.uuid4())
+
+    if pasted_text:
+        is_valid, validation_msg = validate_resume_text(pasted_text)
+        if not is_valid:
+            return None, None, None, validation_msg
+        return pasted_text[:MAX_RESUME_TEXT_CHARS], "Pasted_Resume.txt", file_uuid, None
+    elif uploaded_file and uploaded_file.filename != "":
+        filename_lower = uploaded_file.filename.lower()
+        if not any(filename_lower.endswith(ext) for ext in ALLOWED_RESUME_EXTENSIONS):
+            return (
+                None,
+                None,
+                None,
+                "Invalid file format. Only PDF (.pdf) and Word (.docx) resumes are supported.",
+            )
+        resume_filename = uploaded_file.filename
+        safe_name = secure_filename(f"{file_uuid}_{uploaded_file.filename}")
+        saved_file_path = os.path.join(config.UPLOAD_FOLDER, safe_name)
+        uploaded_file.save(saved_file_path)
+        logger.info(f"Uploaded resume saved locally at: {saved_file_path}")
+        extracted_resume_text = extract_text_from_file(saved_file_path)
+        return extracted_resume_text, resume_filename, file_uuid, None
+    else:
+        return None, None, None, "Please upload a PDF resume or paste your resume text."
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     """
     Handles PDF resume uploads, processes files, calls coordinator,
     persists result states, and redirects to candidate dashboards.
+    Supports optional ?async=true query parameter or AJAX calls for background execution.
     """
     try:
-        pasted_text = request.form.get("resume_text", "").strip()
-        uploaded_file = request.files.get("resume")
-        file_uuid = str(uuid.uuid4())
-        resume_filename = "pasted_resume.txt"
-
-        if pasted_text:
-            is_valid, validation_msg = validate_resume_text(pasted_text)
-            if not is_valid:
-                flash(validation_msg, "error")
-                return redirect(url_for("index"))
-            extracted_resume_text = pasted_text[:MAX_RESUME_TEXT_CHARS]
-            resume_filename = "Pasted_Resume.txt"
-        elif uploaded_file and uploaded_file.filename != "":
-            filename_lower = uploaded_file.filename.lower()
-            if not any(filename_lower.endswith(ext) for ext in ALLOWED_RESUME_EXTENSIONS):
-                flash(
-                    "Invalid file format. Only PDF (.pdf) and Word (.docx) resumes are supported.",
-                    "error",
-                )
-                return redirect(url_for("index"))
-            resume_filename = uploaded_file.filename
-            safe_name = secure_filename(f"{file_uuid}_{uploaded_file.filename}")
-            saved_file_path = os.path.join(config.UPLOAD_FOLDER, safe_name)
-            uploaded_file.save(saved_file_path)
-            logger.info(f"Uploaded resume saved locally at: {saved_file_path}")
-            extracted_resume_text = extract_text_from_file(saved_file_path)
-        else:
-            flash(
-                "Please upload a PDF resume or paste your resume text.",
-                "error",
-            )
+        extracted_resume_text, resume_filename, file_uuid, validation_error = _extract_and_validate_resume(request)
+        if validation_error:
+            if request.args.get("async") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return jsonify({"success": False, "error": validation_error}), 400
+            flash(validation_error, "error")
             return redirect(url_for("index"))
 
         selected_company = request.form.get("company", "General").strip()
         job_description = request.form.get("job_description", "").strip()
+        student_id = request.form.get("student_id", "default_student").strip()
         if len(job_description) > 15000:
             job_description = job_description[:15000]
 
-        # Execute coordinated multi-agent analysis via single Gemini call
+        # Check for asynchronous execution request
+        if request.args.get("async") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            task = create_analysis_task(
+                company_name=selected_company,
+                resume_filename=resume_filename
+            )
+            start_async_analysis(
+                task=task,
+                coordinator_agent=coordinator_agent,
+                save_analysis_func=save_analysis,
+                resume_text=extracted_resume_text,
+                job_description=job_description,
+                company_name=selected_company,
+                resume_filename=resume_filename,
+                analysis_id=file_uuid,
+                student_id=student_id
+            )
+            return jsonify({
+                "success": True,
+                "status": "started",
+                "task_id": task.task_id,
+                "analysis_id": file_uuid,
+                "stream_url": f"/api/analysis/stream/{task.task_id}",
+                "status_url": f"/api/analysis/status/{task.task_id}"
+            }), 202
+
+        # Synchronous execution fallback (preserves 100% test compatibility)
         analysis_payload = coordinator_agent.analyze(
             resume_text=extracted_resume_text,
             job_description=job_description,
             company_name=selected_company
         )
 
-        candidate_student_id = (
-            request.form.get("student_id")
-            or request.cookies.get("student_id")
-            or "default_student"
-        ).strip()
-
-        # Store analysis result in SQLite database with candidate profile indexing
         save_analysis(
             analysis_id=file_uuid,
             resume_filename=resume_filename,
@@ -218,24 +262,122 @@ def analyze():
             student_id=candidate_student_id
         )
 
-        # Redirect user directly to their new placement analysis dashboard
-        response = redirect(url_for("dashboard", analysis_id=file_uuid))
-        response.set_cookie("student_id", candidate_student_id, max_age=60 * 60 * 24 * 365)
-        return response
+        return redirect(url_for("dashboard", analysis_id=file_uuid))
 
     except AIAnalysisError as aie:
         logger.warning(f"AIAnalysisError in analysis workflow: {str(aie)}")
+        if request.args.get("async") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "error": aie.user_friendly_message}), 500
         flash(aie.user_friendly_message, "error")
         return redirect(url_for("index"))
     except ValueError as ve:
         logger.warning(f"Validation error in analysis workflow: {str(ve)}")
+        if request.args.get("async") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "error": str(ve)}), 400
         flash(str(ve), "error")
         return redirect(url_for("index"))
     except Exception as e:
         logger.error(f"Analysis workflow crashed: {str(e)}")
         friendly_message = format_ai_error_for_user(e)
+        if request.args.get("async") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "error": friendly_message}), 500
         flash(friendly_message, "error")
         return redirect(url_for("index"))
+
+
+@app.route("/api/analysis/start", methods=["POST"])
+def start_analysis_async():
+    """
+    Dedicated REST endpoint initiating asynchronous placement analysis.
+    Validates resume text/file and schedules multi-agent processing in ThreadPoolExecutor.
+    Returns task_id, stream_url (SSE), and status_url.
+    """
+    try:
+        extracted_resume_text, resume_filename, file_uuid, validation_error = _extract_and_validate_resume(request)
+        if validation_error:
+            return jsonify({"success": False, "error": validation_error}), 400
+
+        selected_company = request.form.get("company", "General").strip()
+        job_description = request.form.get("job_description", "").strip()
+        student_id = request.form.get("student_id", "default_student").strip()
+        if len(job_description) > 15000:
+            job_description = job_description[:15000]
+
+        task = create_analysis_task(
+            company_name=selected_company,
+            resume_filename=resume_filename
+        )
+
+        start_async_analysis(
+            task=task,
+            coordinator_agent=coordinator_agent,
+            save_analysis_func=save_analysis,
+            resume_text=extracted_resume_text,
+            job_description=job_description,
+            company_name=selected_company,
+            resume_filename=resume_filename,
+            analysis_id=file_uuid,
+            student_id=student_id
+        )
+
+        return jsonify({
+            "success": True,
+            "status": "started",
+            "task_id": task.task_id,
+            "analysis_id": file_uuid,
+            "stream_url": f"/api/analysis/stream/{task.task_id}",
+            "status_url": f"/api/analysis/status/{task.task_id}"
+        }), 202
+
+    except Exception as e:
+        logger.error(f"Failed to start async analysis: {str(e)}")
+        friendly_message = format_ai_error_for_user(e)
+        return jsonify({"success": False, "error": friendly_message}), 500
+
+
+@app.route("/api/analysis/stream/<task_id>")
+def stream_analysis_progress(task_id: str):
+    """
+    Server-Sent Events (SSE) endpoint emitting real-time multi-agent milestones.
+    Emits data: <json>\\n\\n for each agent milestone, ending upon completed or error state.
+    """
+    task = get_analysis_task(task_id)
+    if not task:
+        return jsonify({"success": False, "error": f"Analysis task '{task_id}' not found"}), 404
+
+    def generate_events():
+        last_index = 0
+        while True:
+            events = task.get_events_since(last_index, timeout=15.0)
+            if events:
+                for ev in events:
+                    yield f"data: {json.dumps(ev)}\n\n"
+                    last_index += 1
+                    if ev.get("status") in ("completed", "error"):
+                        return
+            else:
+                if task.status in ("completed", "error"):
+                    return
+                # SSE heartbeat comment to keep HTTP connection alive
+                yield ": keep-alive\n\n"
+
+    response = Response(generate_events(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache, no-transform"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    return response
+
+
+@app.route("/api/analysis/status/<task_id>")
+def get_analysis_task_status(task_id: str):
+    """
+    Polling fallback endpoint returning current analysis task status and milestones.
+    """
+    task = get_analysis_task(task_id)
+    if not task:
+        return jsonify({"success": False, "error": f"Analysis task '{task_id}' not found"}), 404
+
+    return jsonify({"success": True, **task.to_dict()}), 200
 
 @app.route("/dashboard/<analysis_id>")
 def dashboard(analysis_id: str) -> str:

@@ -129,23 +129,6 @@
                       <i class="fa-solid fa-triangle-exclamation"></i>
                       <span id="uploadTypeErrorMessage">Unsupported file type. Please upload a PDF or DOCX file.</span>
                     </div>
-
-                    <!-- File Feedback Badge Container -->
-                    <div id="fileFeedbackBadge" class="mt-2 d-none">
-                      <span class="badge bg-success-subtle text-success border border-success-subtle p-2 d-inline-flex align-items-center gap-2 rounded-pill">
-                        <i class="fa-solid fa-file-check"></i>
-                        <span id="fileFeedbackBadgeText">Selected file</span>
-                        <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" id="btnRemoveFile" title="Remove selected file">
-                          <i class="fa-solid fa-xmark"></i> Remove
-                        </button>
-                      </span>
-                    </div>
-
-                    <!-- Unsupported File Type Error Alert -->
-                    <div id="uploadTypeErrorAlert" class="alert alert-danger d-none mt-2 p-2 small d-flex align-items-center gap-2 rounded-3" role="alert">
-                      <i class="fa-solid fa-triangle-exclamation"></i>
-                      <span id="uploadTypeErrorMessage">Unsupported file type. Please upload a PDF or DOCX file.</span>
-                    </div>
                   </div>
                   <div class="tab-pane fade" id="text-pane" role="tabpanel">
                     <textarea name="resume_text" id="resumeTextInput" rows="5" class="form-control rounded-3"
@@ -271,12 +254,28 @@
   <!-- Agent Progress Panel Overlay (Hidden by Default) -->
   <div id="progressOverlay" class="progress-overlay d-none">
     <div class="progress-panel glass-card text-center p-5">
-      <div class="spinner-border text-primary mb-4" role="status" style="width: 3rem; height: 3rem;"></div>
-      <h3 class="fw-bold text-dark">Coordinating AI Agents</h3>
-      <p class="text-secondary">Orchestrating multi-agent analysis in progress...</p>
+      <div id="progressSpinner" class="spinner-border text-primary mb-4" role="status"
+        style="width: 3rem; height: 3rem;"></div>
+      <h3 class="fw-bold text-dark" id="progressTitle">Coordinating AI Agents</h3>
+      <p class="text-secondary" id="progressSubtitle">Orchestrating multi-agent analysis in progress...</p>
+
+      <!-- Live Progress Bar -->
+      <div class="progress mb-4" style="height: 8px; border-radius: 4px;">
+        <div id="analysisProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+          role="progressbar" style="width: 5%;" aria-valuenow="5" aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+
+      <!-- Live Stream Error Alert -->
+      <div id="progressErrorAlert" class="alert alert-danger d-none text-start mb-3">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+        <span id="progressErrorMessage"></span>
+        <div class="mt-2 text-end">
+          <button type="button" class="btn btn-sm btn-outline-danger" id="btnCloseProgressError">Close & Retry</button>
+        </div>
+      </div>
 
       <ul class="progress-steps-list text-start">
-        <li class="progress-step" id="step1">
+        <li class="progress-step text-muted" id="step1">
           <div class="step-indicator">1</div>
           <span>Resume Text Extracted Successfully</span>
         </li>
@@ -301,7 +300,7 @@
           <span>Final Placement Analysis compiling</span>
         </li>
       </ul>
-      <p class="text-muted small">Please stand by. This takes around 5-10 seconds.</p>
+      <p class="text-muted small" id="progressFooterNote">Please stand by. Multi-agent processing in progress...</p>
     </div>
   </div>
 
