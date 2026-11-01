@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initCompanyExplorer();
   initSkillGapFilter();
   initRoadmapExport();
-  initProgressTracker();
+  initCodingSandbox();
 });
 
 function initThemeToggle() {
