@@ -170,6 +170,151 @@
       </div>
     </div>
 
+    <!-- Multi-Version Resume Comparison & Longitudinal Progress Tracker -->
+    <div class="card glass-card p-4 border-0 mb-4" id="progressTrackerCard" data-trend='{{ trend_series_json|safe }}'>
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+          <span class="text-primary fw-semibold text-uppercase small">Longitudinal Progress Tracker</span>
+          <h4 class="fw-bold mb-0">
+            <i class="fa-solid fa-timeline text-primary me-2"></i> Multi-Version Resume Progression
+          </h4>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="badge bg-{{ delta_data.badge_class }}-subtle text-{{ delta_data.badge_class }} border border-{{ delta_data.badge_class }}-subtle px-3 py-2 rounded-pill fw-semibold" id="deltaBadge">
+            <i class="fa-solid fa-arrow-trend-up me-1"></i> {{ delta_data.badge_text }}
+          </span>
+          {% if versions|length > 1 %}
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#versionDiffModal" id="btnOpenDiffModal">
+              <i class="fa-solid fa-code-compare me-1"></i> Side-by-Side Diff
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Version Switcher Pills -->
+      <div class="d-flex flex-wrap gap-2 mb-4 p-2 bg-light rounded-pill border align-items-center">
+        <span class="small fw-bold text-secondary ms-2 me-1"><i class="fa-solid fa-code-branch text-primary me-1"></i> Iteration Versions:</span>
+        {% for v in versions %}
+          {% set is_active = (v.id == analysis_id) %}
+          <a href="/dashboard/{{ v.id }}" class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ 'btn-primary shadow-sm' if is_active else 'btn-outline-secondary border-0' }}" title="Uploaded on {{ v.created_at }}">
+            <i class="fa-solid fa-file-lines me-1"></i> Version {{ v.version_number|default(loop.index) }}
+            <span class="badge bg-white text-dark rounded-pill ms-1">{{ v.ats_score }}/100</span>
+          </a>
+        {% endfor %}
+      </div>
+
+      <!-- Delta Highlights Row -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+          <div class="p-3 bg-light rounded-3 border text-center h-100">
+            <small class="text-secondary fw-semibold d-block mb-1">ATS Score Delta</small>
+            <h4 class="fw-bold mb-0 {{ 'text-success' if delta_data.ats_delta > 0 else ('text-danger' if delta_data.ats_delta < 0 else 'text-primary') }}">
+              {% if delta_data.ats_delta > 0 %}+{{ delta_data.ats_delta }}{% else %}{{ delta_data.ats_delta }}{% endif %}
+              <small class="fs-6 fw-normal text-muted">pts</small>
+            </h4>
+            <small class="text-muted d-block mt-1">Current: {{ delta_data.ats_current }} | Prev: {{ delta_data.ats_previous if delta_data.ats_previous is not none else 'N/A' }}</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="p-3 bg-light rounded-3 border text-center h-100">
+            <small class="text-secondary fw-semibold d-block mb-1">Job Match Delta</small>
+            <h4 class="fw-bold mb-0 {{ 'text-success' if delta_data.match_delta > 0 else ('text-danger' if delta_data.match_delta < 0 else 'text-primary') }}">
+              {% if delta_data.match_delta > 0 %}+{{ delta_data.match_delta }}{% else %}{{ delta_data.match_delta }}{% endif %}%
+            </h4>
+            <small class="text-muted d-block mt-1">Current: {{ delta_data.match_current }}% | Prev: {{ delta_data.match_previous ~ '%' if delta_data.match_previous is not none else 'N/A' }}</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="p-3 bg-light rounded-3 border text-center h-100">
+            <small class="text-secondary fw-semibold d-block mb-1">Newly Matched Keywords</small>
+            <h4 class="fw-bold mb-0 text-success">
+              +{{ delta_data.newly_matched_keywords|length }}
+              <small class="fs-6 fw-normal text-muted">keywords</small>
+            </h4>
+            <small class="text-muted d-block mt-1">Incorporated in v{{ delta_data.current_version }}</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="p-3 bg-light rounded-3 border text-center h-100">
+            <small class="text-secondary fw-semibold d-block mb-1">Resolved Skill Gaps</small>
+            <h4 class="fw-bold mb-0 text-primary">
+              {{ delta_data.resolved_skill_gaps|length }}
+              <small class="fs-6 fw-normal text-muted">cleared</small>
+            </h4>
+            <small class="text-muted d-block mt-1">{{ delta_data.remaining_skill_gaps|length }} gaps remaining</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Longitudinal Trend Visualization (Chart.js) -->
+      <div class="p-3 bg-light rounded-4 border mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+          <span class="small fw-bold text-dark">
+            <i class="fa-solid fa-chart-line text-primary me-1"></i> ATS Compatibility &amp; Match Progression (v1 - v{{ versions|length }})
+          </span>
+          <span class="small text-muted">
+            <i class="fa-regular fa-calendar me-1"></i> {{ trend_series.dates[0] }} to {{ trend_series.dates[-1] }}
+          </span>
+        </div>
+        <div style="position: relative; height: 220px; width: 100%;">
+          <canvas id="progressTrendChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Incremental Keywords & Resolved Gaps Breakdown -->
+      {% if delta_data.newly_matched_keywords or delta_data.resolved_skill_gaps %}
+        <div class="row g-3">
+          {% if delta_data.newly_matched_keywords %}
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded-3 border h-100">
+                <span class="small fw-bold text-success d-block mb-2">
+                  <i class="fa-solid fa-circle-check me-1"></i> Newly Unlocked Keywords (+{{ delta_data.newly_matched_keywords|length }})
+                </span>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for kw in delta_data.newly_matched_keywords %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill py-1 px-2 small">
+                      <i class="fa-solid fa-plus me-1"></i>{{ kw }}
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if delta_data.resolved_skill_gaps %}
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded-3 border h-100">
+                <span class="small fw-bold text-primary d-block mb-2">
+                  <i class="fa-solid fa-shield-check me-1"></i> Resolved Skill Gaps
+                </span>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for sg in delta_data.resolved_skill_gaps %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill py-1 px-2 small">
+                      <i class="fa-solid fa-check me-1"></i>{{ sg }}
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <!-- Delta Summary Feedback -->
+      <div class="alert alert-light border mt-3 mb-0 small text-secondary">
+        <i class="fa-solid fa-circle-info text-primary me-2"></i>
+        <b>Iteration Delta Summary:</b> {{ delta_data.status_message }}
+        {% if delta_data.summary_bullets %}
+          <ul class="mb-0 mt-2 ps-3">
+            {% for b in delta_data.summary_bullets %}
+              <li>{{ b }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+
+    </div>
+
     <!-- Resume Feedback Panel -->
     <div class="row g-4 mb-4">
       
@@ -417,6 +562,133 @@
       </div>
     </div>
 
+    <!-- Side-by-Side Iteration Diff Modal -->
+    <div class="modal fade" id="versionDiffModal" tabindex="-1" aria-labelledby="versionDiffModalLabel" aria-hidden="true" data-current-id="{{ analysis_id }}">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title fw-bold" id="versionDiffModalLabel">
+              <i class="fa-solid fa-code-compare text-primary me-2"></i> Side-by-Side Resume Iteration Diff
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <p class="text-secondary small mb-0">
+                Inspect score deltas, newly added keywords, and resolved skill gaps between resume revisions.
+              </p>
+              <div class="d-flex align-items-center gap-2">
+                <label for="selectDiffBaseline" class="small fw-semibold text-secondary">Compare Against:</label>
+                <select class="form-select form-select-sm rounded-pill px-3" id="selectDiffBaseline" style="width: auto;">
+                  {% for v in versions %}
+                    {% if v.id != analysis_id %}
+                      <option value="{{ v.id }}" {{ 'selected' if (previous_record and v.id == previous_record.id) or loop.first }}>
+                        Version {{ v.version_number|default(loop.index) }} (ATS: {{ v.ats_score }})
+                      </option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div id="diffLoadingSpinner" class="text-center py-5 d-none">
+              <div class="spinner-border text-primary" role="status"></div>
+              <div class="small text-muted mt-2">Computing granular iteration diff...</div>
+            </div>
+
+            <div id="diffContentArea">
+              <!-- Two columns side-by-side -->
+              <div class="row g-4">
+                <!-- Left Column: Earlier Version -->
+                <div class="col-md-6">
+                  <div class="card bg-light border-0 p-3 rounded-4 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="fw-bold mb-0 text-secondary" id="diffVersionATitle">
+                        <i class="fa-solid fa-clock-rotate-left me-1"></i> Version {{ delta_data.previous_version|default(1) }} (Previous)
+                      </h6>
+                      <span class="badge bg-secondary text-white rounded-pill px-3 py-1" id="diffVersionAScore">
+                        ATS: {{ delta_data.ats_previous if delta_data.ats_previous is not none else 'N/A' }}/100
+                      </span>
+                    </div>
+                    
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Keywords Matched:</h6>
+                    <div id="diffVersionAKeywords" class="d-flex flex-wrap gap-1 mb-3">
+                      {% for kw in delta_data.previous_keywords_found %}
+                        <span class="badge bg-white text-secondary border rounded-pill">{{ kw }}</span>
+                      {% else %}
+                        <span class="text-muted small">None recorded</span>
+                      {% endfor %}
+                    </div>
+
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Identified Missing Keywords:</h6>
+                    <div id="diffVersionAMissing" class="d-flex flex-wrap gap-1 mb-3">
+                      {% for kw in delta_data.persistent_missing_keywords %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill">{{ kw }}</span>
+                      {% else %}
+                        <span class="text-muted small">None</span>
+                      {% endfor %}
+                    </div>
+
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Skill Gaps:</h6>
+                    <div id="diffVersionAGaps" class="small text-secondary">
+                      {% for sg in delta_data.resolved_skill_gaps %}
+                        <div class="text-danger mb-1"><i class="fa-solid fa-xmark me-1"></i> {{ sg }}</div>
+                      {% endfor %}
+                      {% for sg in delta_data.remaining_skill_gaps %}
+                        <div class="text-secondary mb-1"><i class="fa-solid fa-circle-minus me-1"></i> {{ sg }}</div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Column: Current Version -->
+                <div class="col-md-6">
+                  <div class="card bg-light-subtle border border-success-subtle p-3 rounded-4 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="fw-bold mb-0 text-success" id="diffVersionBTitle">
+                        <i class="fa-solid fa-star me-1"></i> Version {{ delta_data.current_version }} (Active)
+                      </h6>
+                      <span class="badge bg-success text-white rounded-pill px-3 py-1" id="diffVersionBScore">
+                        ATS: {{ delta_data.ats_current }}/100
+                      </span>
+                    </div>
+
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Newly Added Keywords (+{{ delta_data.newly_matched_keywords|length }}):</h6>
+                    <div id="diffVersionBNewKeywords" class="d-flex flex-wrap gap-1 mb-3">
+                      {% for kw in delta_data.newly_matched_keywords %}
+                        <span class="badge bg-success text-white rounded-pill"><i class="fa-solid fa-plus me-1"></i>{{ kw }}</span>
+                      {% else %}
+                        <span class="text-muted small">No new keywords identified in this iteration</span>
+                      {% endfor %}
+                    </div>
+
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Resolved Skill Gaps (Cleared):</h6>
+                    <div id="diffVersionBResolvedGaps" class="d-flex flex-wrap gap-1 mb-3">
+                      {% for sg in delta_data.resolved_skill_gaps %}
+                        <span class="badge bg-primary text-white rounded-pill"><i class="fa-solid fa-check me-1"></i>{{ sg }}</span>
+                      {% else %}
+                        <span class="text-muted small">None resolved in this iteration</span>
+                      {% endfor %}
+                    </div>
+
+                    <h6 class="small fw-bold text-dark mt-2 mb-1">Current Keyword Matches:</h6>
+                    <div id="diffVersionBKeywords" class="d-flex flex-wrap gap-1 mb-2">
+                      {% for kw in delta_data.current_keywords_found %}
+                        <span class="badge bg-white text-dark border rounded-pill">{{ kw }}</span>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close Diff</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- Footer -->
@@ -428,6 +700,8 @@
 
   <!-- Bootstrap 5 JS Bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js for Longitudinal Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Custom JS -->
   <script src="{{ url_for('static', filename='js/script.js') }}"></script>
   <!-- Vercel Web Analytics -->

@@ -1171,414 +1171,299 @@ function initRoadmapExport() {
 }
 
 /**
- * Interactive DSA & Coding Assessment Sandbox
- * Manages Monaco editor initialization, language switching, problem fetching,
- * and real-time code evaluation with test cases and Big-O complexity reporting.
+ * Multi-Version Resume Comparison & Longitudinal Progress Tracker
+ * - Initializes Chart.js line/area chart showing ATS Score, Job Match %, and Skill Gaps over time
+ * - Supports theme-reactive colors for gridlines and text
+ * - Manages interactive side-by-side diff modal and dynamic baseline selection
  */
-function initCodingSandbox() {
-  const btnModeQA = document.getElementById("btnModeQA");
-  const btnModeCoding = document.getElementById("btnModeCoding");
-  const qaSection = document.getElementById("qaInterviewSection");
-  const codingSection = document.getElementById("codingSandboxSection");
+function initProgressTracker() {
+  const trackerCard = document.getElementById("progressTrackerCard");
+  if (!trackerCard) return;
 
-  if (!btnModeQA || !btnModeCoding || !codingSection) return;
-
-  const mainEl = document.querySelector("main[data-analysis-id]");
-  const analysisId = mainEl ? mainEl.getAttribute("data-analysis-id") : "";
-  const targetCompany = mainEl ? mainEl.getAttribute("data-company-name") : "General";
-
-  // Problem UI Elements
-  const problemTitleEl = document.getElementById("codingProblemTitle");
-  const problemDescEl = document.getElementById("codingProblemDesc");
-  const inputFormatEl = document.getElementById("codingInputFormat");
-  const outputFormatEl = document.getElementById("codingOutputFormat");
-  const constraintsListEl = document.getElementById("codingConstraintsList");
-  const examplesContainerEl = document.getElementById("codingExamplesContainer");
-  const difficultyBadgeEl = document.getElementById("codingDifficultyBadge");
-  const categoryBadgeEl = document.getElementById("codingCategoryBadge");
-  const selectDifficultyEl = document.getElementById("selectCodingDifficulty");
-  const btnFetchNewProblem = document.getElementById("btnFetchNewProblem");
-
-  // Editor Elements
-  const languageSelectEl = document.getElementById("codingLanguageSelect");
-  const btnResetCode = document.getElementById("btnResetCode");
-  const btnRunCode = document.getElementById("btnRunCode");
-  const editorContainer = document.getElementById("monacoEditorContainer");
-  const codeTextareaFallback = document.getElementById("codeTextareaFallback");
-  const editorLoadingSpinner = document.getElementById("editorLoadingSpinner");
-
-  // Evaluation Results Elements
-  const resultsPanel = document.getElementById("codingResultsPanel");
-  const verdictBadge = document.getElementById("codingVerdictBadge");
-  const correctnessScoreEl = document.getElementById("codeCorrectnessScore");
-  const qualityScoreEl = document.getElementById("codeQualityScore");
-  const timeComplexityEl = document.getElementById("codeTimeComplexity");
-  const spaceComplexityEl = document.getElementById("codeSpaceComplexity");
-  const timeExplanationEl = document.getElementById("codeTimeExplanation");
-  const spaceExplanationEl = document.getElementById("codeSpaceExplanation");
-  const testCasesContainer = document.getElementById("testCasesContainer");
-  const feedbackTextEl = document.getElementById("codeFeedbackText");
-  const suggestionsListEl = document.getElementById("codeSuggestionsList");
-
-  let monacoEditor = null;
-  let monacoLoaded = false;
-  let currentProblem = null;
-  let isProblemLoaded = false;
-
-  const starterDefaults = {
-    python: "def solve(*args, **kwargs):\n    # Write your solution here\n    pass\n",
-    cpp: "#include <iostream>\n#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    // Write your solution here\n};\n",
-    java: "import java.util.*;\n\nclass Solution {\n    // Write your solution here\n}\n"
-  };
-
-  function getMonacoLang(lang) {
-    if (lang === "cpp" || lang === "c++") return "cpp";
-    if (lang === "java") return "java";
-    return "python";
+  const trendRaw = trackerCard.getAttribute("data-trend");
+  let trendData = null;
+  try {
+    trendData = trendRaw ? JSON.parse(trendRaw) : null;
+  } catch (err) {
+    console.warn("Could not parse trend data for Chart.js:", err);
   }
 
-  function getMonacoTheme() {
+  // 1. Initialize Chart.js longitudinal trend chart
+  const canvas = document.getElementById("progressTrendChart");
+  if (canvas && window.Chart && trendData && Array.isArray(trendData.labels) && trendData.labels.length > 0) {
     const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
-    return isDark ? "vs-dark" : "vs";
-  }
+    const textColor = isDark ? "#c4c7c5" : "#444746";
+    const gridColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
 
-  // Initialize Monaco Editor
-  function setupMonaco() {
-    if (typeof window.require !== "undefined" && typeof window.require.config === "function") {
-      try {
-        if (editorLoadingSpinner) editorLoadingSpinner.classList.remove("d-none");
-        window.require.config({
-          paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs" }
-        });
-
-        window.require(["vs/editor/editor.main"], () => {
-          if (editorLoadingSpinner) editorLoadingSpinner.classList.add("d-none");
-          monacoLoaded = true;
-
-          const initialCode = (currentProblem && currentProblem.starter_code && currentProblem.starter_code.python)
-            || starterDefaults.python;
-
-          monacoEditor = window.monaco.editor.create(editorContainer, {
-            value: initialCode,
-            language: "python",
-            theme: getMonacoTheme(),
-            automaticLayout: true,
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            lineNumbers: "on",
-            tabSize: 4
-          });
-
-          // Watch theme toggle changes
-          const observer = new MutationObserver(() => {
-            if (window.monaco && monacoEditor) {
-              window.monaco.editor.setTheme(getMonacoTheme());
+    const ctx = canvas.getContext("2d");
+    const progressChart = new window.Chart(ctx, {
+      type: "line",
+      data: {
+        labels: trendData.labels,
+        datasets: [
+          {
+            label: "ATS Profile Score",
+            data: trendData.ats_scores,
+            borderColor: "#1a73e8",
+            backgroundColor: "rgba(26, 115, 232, 0.12)",
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#1a73e8",
+            yAxisID: "y"
+          },
+          {
+            label: "Job Match %",
+            data: trendData.match_scores,
+            borderColor: "#34a853",
+            backgroundColor: "rgba(52, 168, 83, 0.08)",
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#34a853",
+            yAxisID: "y"
+          },
+          {
+            label: "Skill Gaps Count",
+            data: trendData.gap_counts,
+            borderColor: "#ea4335",
+            borderDash: [5, 5],
+            backgroundColor: "transparent",
+            fill: false,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: "#ea4335",
+            yAxisID: "y1"
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              boxWidth: 14,
+              font: { size: 12, family: "'Outfit', sans-serif" },
+              color: textColor
             }
-          });
-          observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
-        }, (err) => {
-          console.warn("Monaco Editor CDN load failed; switching to resilient textarea fallback:", err);
-          enableFallbackTextarea();
-        });
-      } catch (e) {
-        console.warn("Error invoking Monaco loader:", e);
-        enableFallbackTextarea();
-      }
-    } else {
-      enableFallbackTextarea();
-    }
-  }
-
-  function enableFallbackTextarea() {
-    if (editorLoadingSpinner) editorLoadingSpinner.classList.add("d-none");
-    if (editorContainer) editorContainer.classList.add("d-none");
-    if (codeTextareaFallback) {
-      codeTextareaFallback.classList.remove("d-none");
-      const currentLang = languageSelectEl ? languageSelectEl.value : "python";
-      const initialCode = (currentProblem && currentProblem.starter_code && currentProblem.starter_code[currentLang])
-        || starterDefaults[currentLang]
-        || starterDefaults.python;
-      codeTextareaFallback.value = initialCode;
-    }
-  }
-
-  function getActiveCode() {
-    if (monacoEditor && monacoLoaded) {
-      return monacoEditor.getValue();
-    }
-    if (codeTextareaFallback) {
-      return codeTextareaFallback.value;
-    }
-    return "";
-  }
-
-  function setActiveCode(code, lang) {
-    if (monacoEditor && monacoLoaded) {
-      monacoEditor.setValue(code);
-      if (window.monaco) {
-        window.monaco.editor.setModelLanguage(monacoEditor.getModel(), getMonacoLang(lang));
-      }
-    }
-    if (codeTextareaFallback) {
-      codeTextareaFallback.value = code;
-    }
-  }
-
-  // Switch between Q&A Simulator and Coding Sandbox modes
-  btnModeQA.addEventListener("click", () => {
-    btnModeQA.classList.remove("btn-outline-primary", "border-0");
-    btnModeQA.classList.add("btn-primary");
-    btnModeCoding.classList.remove("btn-success");
-    btnModeCoding.classList.add("btn-outline-success", "border-0");
-
-    qaSection.classList.remove("d-none");
-    codingSection.classList.add("d-none");
-  });
-
-  btnModeCoding.addEventListener("click", () => {
-    btnModeCoding.classList.remove("btn-outline-success", "border-0");
-    btnModeCoding.classList.add("btn-success");
-    btnModeQA.classList.remove("btn-primary");
-    btnModeQA.classList.add("btn-outline-primary", "border-0");
-
-    qaSection.classList.add("d-none");
-    codingSection.classList.remove("d-none");
-
-    if (!isProblemLoaded) {
-      loadProblem();
-    }
-
-    if (!monacoLoaded && !monacoEditor) {
-      setupMonaco();
-    } else if (monacoEditor) {
-      setTimeout(() => monacoEditor.layout(), 100);
-    }
-  });
-
-  // Fetch or regenerate coding problem
-  async function loadProblem() {
-    const diff = selectDifficultyEl ? selectDifficultyEl.value : "Medium";
-    if (problemTitleEl) problemTitleEl.innerHTML = '<span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading Algorithmic Challenge...';
-    if (btnFetchNewProblem) btnFetchNewProblem.disabled = true;
-
-    try {
-      const url = `/api/interview/${analysisId}/coding-problem?difficulty=${encodeURIComponent(diff)}&company=${encodeURIComponent(targetCompany)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (data && data.problem) {
-        currentProblem = data.problem;
-        isProblemLoaded = true;
-        renderProblemDetails(currentProblem);
-
-        const currentLang = languageSelectEl ? languageSelectEl.value : "python";
-        const starter = (currentProblem.starter_code && currentProblem.starter_code[currentLang])
-          || starterDefaults[currentLang]
-          || starterDefaults.python;
-        setActiveCode(starter, currentLang);
-      }
-    } catch (err) {
-      console.error("Failed to fetch coding challenge:", err);
-      if (problemTitleEl) problemTitleEl.innerText = "Error Loading Challenge";
-    } finally {
-      if (btnFetchNewProblem) btnFetchNewProblem.disabled = false;
-    }
-  }
-
-  function renderProblemDetails(prob) {
-    if (problemTitleEl) problemTitleEl.innerText = prob.title || "Algorithmic Challenge";
-    if (problemDescEl) problemDescEl.innerText = prob.description || "";
-    if (inputFormatEl) inputFormatEl.innerText = prob.input_format || "Standard inputs";
-    if (outputFormatEl) outputFormatEl.innerText = prob.output_format || "Standard return value";
-
-    // Difficulty badge
-    if (difficultyBadgeEl) {
-      const d = (prob.difficulty || "Medium").toLowerCase();
-      difficultyBadgeEl.innerText = prob.difficulty || "Medium";
-      difficultyBadgeEl.className = "badge rounded-pill px-3 py-1 fw-semibold";
-      if (d === "easy") {
-        difficultyBadgeEl.classList.add("bg-success-subtle", "text-success", "border", "border-success-subtle");
-      } else if (d === "hard") {
-        difficultyBadgeEl.classList.add("bg-danger-subtle", "text-danger", "border", "border-danger-subtle");
-      } else {
-        difficultyBadgeEl.classList.add("bg-warning-subtle", "text-dark", "border", "border-warning-subtle");
-      }
-    }
-
-    // Category badge
-    if (categoryBadgeEl && prob.category) {
-      categoryBadgeEl.innerText = prob.category;
-    }
-
-    // Constraints
-    if (constraintsListEl) {
-      constraintsListEl.innerHTML = "";
-      const constraints = Array.isArray(prob.constraints) ? prob.constraints : [];
-      constraints.forEach(c => {
-        const li = document.createElement("li");
-        li.innerText = c;
-        constraintsListEl.appendChild(li);
-      });
-    }
-
-    // Examples
-    if (examplesContainerEl) {
-      examplesContainerEl.innerHTML = "";
-      const examples = Array.isArray(prob.examples) ? prob.examples : [];
-      examples.forEach((ex, idx) => {
-        const card = document.createElement("div");
-        card.className = "p-3 bg-light rounded-3 border small";
-        card.innerHTML = `
-          <div class="fw-bold text-dark mb-1">Example ${idx + 1}:</div>
-          <div class="font-monospace text-secondary mb-1"><b>Input:</b> ${escapeHtml(ex.input || "")}</div>
-          <div class="font-monospace text-secondary mb-1"><b>Output:</b> ${escapeHtml(ex.output || "")}</div>
-          ${ex.explanation ? `<div class="text-muted"><small><b>Explanation:</b> ${escapeHtml(ex.explanation)}</small></div>` : ""}
-        `;
-        examplesContainerEl.appendChild(card);
-      });
-    }
-  }
-
-  // Language selector switch
-  if (languageSelectEl) {
-    languageSelectEl.addEventListener("change", () => {
-      const lang = languageSelectEl.value;
-      if (currentProblem && currentProblem.starter_code && currentProblem.starter_code[lang]) {
-        setActiveCode(currentProblem.starter_code[lang], lang);
-      } else {
-        setActiveCode(starterDefaults[lang] || "", lang);
+          },
+          tooltip: {
+            backgroundColor: isDark ? "#282a2c" : "#ffffff",
+            titleColor: isDark ? "#e3e3e3" : "#1f1f1f",
+            bodyColor: isDark ? "#c4c7c5" : "#444746",
+            borderColor: isDark ? "#444746" : "#dadce0",
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              title: function (items) {
+                const idx = items[0].dataIndex;
+                const date = trendData.dates && trendData.dates[idx] ? trendData.dates[idx] : "";
+                const filename = trendData.filenames && trendData.filenames[idx] ? trendData.filenames[idx] : "";
+                return `Iteration ${trendData.labels[idx]} (${date}) - ${filename}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: textColor, font: { family: "'Outfit', sans-serif" } }
+          },
+          y: {
+            type: "linear",
+            display: true,
+            position: "left",
+            min: 0,
+            max: 100,
+            grid: { color: gridColor },
+            ticks: {
+              color: textColor,
+              callback: val => `${val}%`,
+              font: { family: "'Outfit', sans-serif" }
+            }
+          },
+          y1: {
+            type: "linear",
+            display: true,
+            position: "right",
+            min: 0,
+            suggestedMax: 8,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: "#ea4335",
+              precision: 0,
+              font: { family: "'Outfit', sans-serif" }
+            }
+          }
+        }
       }
     });
-  }
 
-  // Reset code button
-  if (btnResetCode) {
-    btnResetCode.addEventListener("click", () => {
-      const lang = languageSelectEl ? languageSelectEl.value : "python";
-      const starter = (currentProblem && currentProblem.starter_code && currentProblem.starter_code[lang])
-        || starterDefaults[lang]
-        || "";
-      setActiveCode(starter, lang);
+    // Theme toggle listener to update chart colors
+    const observer = new MutationObserver(() => {
+      const darkNow = document.documentElement.getAttribute("data-bs-theme") === "dark";
+      const newTextColor = darkNow ? "#c4c7c5" : "#444746";
+      const newGridColor = darkNow ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
+
+      if (progressChart) {
+        progressChart.options.scales.x.ticks.color = newTextColor;
+        progressChart.options.scales.x.grid.color = newGridColor;
+        progressChart.options.scales.y.ticks.color = newTextColor;
+        progressChart.options.scales.y.grid.color = newGridColor;
+        progressChart.options.plugins.legend.labels.color = newTextColor;
+        progressChart.update();
+      }
     });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
   }
 
-  // Difficulty change / New Problem buttons
-  if (selectDifficultyEl) {
-    selectDifficultyEl.addEventListener("change", () => loadProblem());
-  }
-  if (btnFetchNewProblem) {
-    btnFetchNewProblem.addEventListener("click", () => loadProblem());
-  }
+  // 2. Interactive side-by-side diff modal dropdown switcher
+  const diffModal = document.getElementById("versionDiffModal");
+  const selectBaseline = document.getElementById("selectDiffBaseline");
+  const diffLoadingSpinner = document.getElementById("diffLoadingSpinner");
+  const diffContentArea = document.getElementById("diffContentArea");
 
-  // Run & Evaluate Code Submission
-  if (btnRunCode) {
-    btnRunCode.addEventListener("click", async () => {
-      const code = getActiveCode();
-      const lang = languageSelectEl ? languageSelectEl.value : "python";
+  if (diffModal && selectBaseline) {
+    const currentAnalysisId = diffModal.getAttribute("data-current-id");
 
-      btnRunCode.disabled = true;
-      const originalHtml = btnRunCode.innerHTML;
-      btnRunCode.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Evaluating...';
+    selectBaseline.addEventListener("change", async () => {
+      const baselineId = selectBaseline.value;
+      if (!baselineId || !currentAnalysisId) return;
+
+      if (diffLoadingSpinner) diffLoadingSpinner.classList.remove("d-none");
+      if (diffContentArea) diffContentArea.classList.add("opacity-25");
 
       try {
-        const payload = {
-          code: code,
-          language: lang,
-          problem: currentProblem
-        };
+        const response = await fetch(`/api/progress/diff/${baselineId}/${currentAnalysisId}`);
+        const data = await response.json();
 
-        const res = await fetch(`/api/interview/${analysisId}/evaluate-code`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        const evalData = data.evaluation || data;
-
-        renderEvaluationResults(evalData);
+        if (data.status === "success" && data.diff) {
+          renderDiffModalContent(data.diff);
+        }
       } catch (err) {
-        console.error("Code evaluation request failed:", err);
-        alert("Evaluation request encountered an error. Please try again.");
+        console.error("Failed to fetch version diff comparison:", err);
       } finally {
-        btnRunCode.disabled = false;
-        btnRunCode.innerHTML = originalHtml;
+        if (diffLoadingSpinner) diffLoadingSpinner.classList.add("d-none");
+        if (diffContentArea) diffContentArea.classList.remove("opacity-25");
       }
     });
   }
 
-  function renderEvaluationResults(res) {
-    if (!resultsPanel) return;
-    resultsPanel.classList.remove("d-none");
+  function renderDiffModalContent(diff) {
+    const a = diff.version_a || {};
+    const b = diff.version_b || {};
+    const d = diff.delta || {};
 
-    const allPassed = Boolean(res.all_passed);
-    const correctness = res.correctness_score ?? 0;
-    const quality = res.code_quality_score ?? 0;
-    const testCases = Array.isArray(res.test_case_results) ? res.test_case_results : [];
-    const passedCount = testCases.filter(t => t.passed).length;
-    const totalCount = testCases.length;
+    const aTitle = document.getElementById("diffVersionATitle");
+    const aScore = document.getElementById("diffVersionAScore");
+    const aKeywords = document.getElementById("diffVersionAKeywords");
+    const aMissing = document.getElementById("diffVersionAMissing");
+    const aGaps = document.getElementById("diffVersionAGaps");
 
-    // Verdict Badge
-    if (verdictBadge) {
-      if (allPassed) {
-        verdictBadge.className = "badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-2 fw-semibold";
-        verdictBadge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> All Test Cases Passed! 🎉';
+    const bTitle = document.getElementById("diffVersionBTitle");
+    const bScore = document.getElementById("diffVersionBScore");
+    const bNewKeywords = document.getElementById("diffVersionBNewKeywords");
+    const bResolvedGaps = document.getElementById("diffVersionBResolvedGaps");
+    const bKeywords = document.getElementById("diffVersionBKeywords");
+
+    if (aTitle) aTitle.innerHTML = `<i class="fa-solid fa-clock-rotate-left me-1"></i> Version ${a.version_number} (Baseline)`;
+    if (aScore) aScore.innerText = `ATS: ${a.ats_score}/100`;
+
+    if (aKeywords) {
+      aKeywords.innerHTML = "";
+      const kwList = Array.isArray(a.keywords_found) ? a.keywords_found : [];
+      if (kwList.length > 0) {
+        kwList.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-white text-secondary border rounded-pill";
+          span.innerText = k;
+          aKeywords.appendChild(span);
+        });
       } else {
-        verdictBadge.className = "badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-2 fw-semibold";
-        verdictBadge.innerHTML = `<i class="fa-solid fa-circle-xmark me-1"></i> ${passedCount}/${totalCount} Test Cases Passed`;
+        aKeywords.innerHTML = '<span class="text-muted small">None recorded</span>';
       }
     }
 
-    // Score Badges
-    if (correctnessScoreEl) correctnessScoreEl.innerText = `${correctness}/100`;
-    if (qualityScoreEl) qualityScoreEl.innerText = `${quality}/100`;
+    if (aMissing) {
+      aMissing.innerHTML = "";
+      const mList = Array.isArray(a.keywords_missing) ? a.keywords_missing : [];
+      if (mList.length > 0) {
+        mList.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill";
+          span.innerText = k;
+          aMissing.appendChild(span);
+        });
+      } else {
+        aMissing.innerHTML = '<span class="text-muted small">None</span>';
+      }
+    }
 
-    // Complexity
-    if (timeComplexityEl) timeComplexityEl.innerText = res.time_complexity || "O(N)";
-    if (spaceComplexityEl) spaceComplexityEl.innerText = res.space_complexity || "O(1)";
-    if (timeExplanationEl) timeExplanationEl.innerText = res.time_complexity_explanation || "Linear time complexity.";
-    if (spaceExplanationEl) spaceExplanationEl.innerText = res.space_complexity_explanation || "Auxiliary space allocation.";
-
-    // Test cases list
-    if (testCasesContainer) {
-      testCasesContainer.innerHTML = "";
-      testCases.forEach((tc, idx) => {
-        const item = document.createElement("div");
-        const isPass = Boolean(tc.passed);
-        item.className = `p-3 rounded-3 border small ${isPass ? 'bg-success-subtle border-success-subtle' : 'bg-danger-subtle border-danger-subtle'}`;
-        item.innerHTML = `
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="fw-bold ${isPass ? 'text-success' : 'text-danger'}">
-              <i class="fa-solid ${isPass ? 'fa-check' : 'fa-xmark'} me-1"></i> Case #${tc.id || idx + 1}
-            </span>
-            <span class="badge ${isPass ? 'bg-success text-white' : 'bg-danger text-white'} rounded-pill px-2 py-1">
-              ${isPass ? 'Passed' : 'Failed'}
-            </span>
-          </div>
-          <div class="font-monospace text-secondary mb-1"><b>Input:</b> ${escapeHtml(tc.input || "")}</div>
-          <div class="font-monospace text-secondary mb-1"><b>Expected:</b> ${escapeHtml(tc.expected || "")}</div>
-          <div class="font-monospace ${isPass ? 'text-success' : 'text-danger'} mb-1"><b>Actual:</b> ${escapeHtml(tc.actual || "")}</div>
-          ${tc.explanation ? `<div class="text-muted"><small>${escapeHtml(tc.explanation)}</small></div>` : ""}
-        `;
-        testCasesContainer.appendChild(item);
+    if (aGaps) {
+      aGaps.innerHTML = "";
+      const gList = Array.isArray(a.skill_gaps) ? a.skill_gaps : [];
+      gList.forEach(g => {
+        const div = document.createElement("div");
+        div.className = "text-secondary mb-1";
+        div.innerHTML = `<i class="fa-solid fa-circle-minus me-1 text-danger"></i> ${escapeHtml(g)}`;
+        aGaps.appendChild(div);
       });
     }
 
-    // Feedback and Optimization Suggestions
-    if (feedbackTextEl) feedbackTextEl.innerText = res.feedback || "Evaluation complete.";
-    if (suggestionsListEl) {
-      suggestionsListEl.innerHTML = "";
-      const suggestions = Array.isArray(res.optimization_suggestions) ? res.optimization_suggestions : [];
-      suggestions.forEach(s => {
-        const li = document.createElement("li");
-        li.innerText = s;
-        suggestionsListEl.appendChild(li);
-      });
+    if (bTitle) bTitle.innerHTML = `<i class="fa-solid fa-star me-1"></i> Version ${b.version_number} (Active)`;
+    if (bScore) bScore.innerText = `ATS: ${b.ats_score}/100`;
+
+    if (bNewKeywords) {
+      bNewKeywords.innerHTML = "";
+      const newly = Array.isArray(d.newly_matched_keywords) ? d.newly_matched_keywords : [];
+      if (newly.length > 0) {
+        newly.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-success text-white rounded-pill";
+          span.innerHTML = `<i class="fa-solid fa-plus me-1"></i>${escapeHtml(k)}`;
+          bNewKeywords.appendChild(span);
+        });
+      } else {
+        bNewKeywords.innerHTML = '<span class="text-muted small">No new keywords identified in this iteration</span>';
+      }
     }
 
-    // Smooth scroll down to assessment results
-    resultsPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (bResolvedGaps) {
+      bResolvedGaps.innerHTML = "";
+      const resolved = Array.isArray(d.resolved_skill_gaps) ? d.resolved_skill_gaps : [];
+      if (resolved.length > 0) {
+        resolved.forEach(g => {
+          const span = document.createElement("span");
+          span.className = "badge bg-primary text-white rounded-pill";
+          span.innerHTML = `<i class="fa-solid fa-check me-1"></i>${escapeHtml(g)}`;
+          bResolvedGaps.appendChild(span);
+        });
+      } else {
+        bResolvedGaps.innerHTML = '<span class="text-muted small">None resolved in this iteration</span>';
+      }
+    }
+
+    if (bKeywords) {
+      bKeywords.innerHTML = "";
+      const bKw = Array.isArray(b.keywords_found) ? b.keywords_found : [];
+      bKw.forEach(k => {
+        const span = document.createElement("span");
+        span.className = "badge bg-white text-dark border rounded-pill";
+        span.innerText = k;
+        bKeywords.appendChild(span);
+      });
+    }
   }
 
   function escapeHtml(str) {

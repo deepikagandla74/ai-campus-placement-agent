@@ -16,7 +16,14 @@ from utils.database import (
     delete_analysis,
     create_interview_session,
     get_interview_session,
-    update_interview_session
+    update_interview_session,
+    get_student_versions,
+    get_previous_analysis
+)
+from utils.progress_tracker import (
+    calculate_version_delta,
+    build_longitudinal_series,
+    generate_side_by_side_diff
 )
 from utils.pdf_reader import (
     extract_text_from_pdf,
@@ -32,6 +39,11 @@ from utils.gemini import (
     format_ai_error_for_user,
 )
 from utils.report_generator import generate_pdf_report
+from utils.gemini import (
+    AIAnalysisError,
+    AIRateLimitError,
+    format_ai_error_for_user
+)
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
 from agents.coding_agent import CodingAssessmentAgent
@@ -190,17 +202,26 @@ def analyze():
             company_name=selected_company
         )
 
-        # Store analysis result in SQLite database
+        candidate_student_id = (
+            request.form.get("student_id")
+            or request.cookies.get("student_id")
+            or "default_student"
+        ).strip()
+
+        # Store analysis result in SQLite database with candidate profile indexing
         save_analysis(
             analysis_id=file_uuid,
             resume_filename=resume_filename,
             company_name=selected_company,
             job_description=job_description,
-            results_dict=analysis_payload
+            results_dict=analysis_payload,
+            student_id=candidate_student_id
         )
 
         # Redirect user directly to their new placement analysis dashboard
-        return redirect(url_for("dashboard", analysis_id=file_uuid))
+        response = redirect(url_for("dashboard", analysis_id=file_uuid))
+        response.set_cookie("student_id", candidate_student_id, max_age=60 * 60 * 24 * 365)
+        return response
 
     except AIAnalysisError as aie:
         logger.warning(f"AIAnalysisError in analysis workflow: {str(aie)}")
@@ -219,17 +240,34 @@ def analyze():
 @app.route("/dashboard/<analysis_id>")
 def dashboard(analysis_id: str) -> str:
     """
-    Loads and renders the candidate evaluation dashboard.
+    Loads and renders the candidate evaluation dashboard with longitudinal
+    progress trends and multi-version delta analysis.
     """
     analysis_record = get_analysis(analysis_id)
     if not analysis_record:
         flash("The requested placement analysis report could not be found.", "error")
         return redirect(url_for("index"))
 
+    student_id = analysis_record.get("student_id") or "default_student"
+    all_versions = get_student_versions(student_id)
+    if not all_versions:
+        all_versions = [analysis_record]
+
+    current_version = analysis_record.get("version_number", 1)
+    previous_record = get_previous_analysis(student_id, current_version=current_version)
+    delta_data = calculate_version_delta(analysis_record, previous_record)
+    trend_series = build_longitudinal_series(all_versions)
+
     return render_template(
         "dashboard.html",
         analysis=analysis_record,
-        analysis_id=analysis_id
+        analysis_id=analysis_id,
+        versions=all_versions,
+        current_version=current_version,
+        previous_record=previous_record,
+        delta_data=delta_data,
+        trend_series=trend_series,
+        trend_series_json=json.dumps(trend_series)
     )
 
 @app.route("/interview/<analysis_id>")
@@ -591,6 +629,47 @@ def api_delete_analysis(analysis_id: str):
             "status": "error",
             "message": "Failed to delete analysis record."
         }), 500
+
+@app.route("/api/progress/<student_id>", methods=["GET"])
+def api_student_progress(student_id: str):
+    """
+    Returns a candidate's full longitudinal version history and trend metrics.
+    """
+    try:
+        versions = get_student_versions(student_id)
+        trend_series = build_longitudinal_series(versions)
+        return jsonify({
+            "status": "success",
+            "student_id": student_id,
+            "total_versions": len(versions),
+            "versions": versions,
+            "trend_series": trend_series
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching progress for student {student_id}: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/progress/diff/<id_a>/<id_b>", methods=["GET"])
+def api_progress_diff(id_a: str, id_b: str):
+    """
+    Generates side-by-side comparison metrics between any two specific resume analyses.
+    """
+    try:
+        rec_a = get_analysis(id_a)
+        rec_b = get_analysis(id_b)
+        if not rec_a or not rec_b:
+            return jsonify({"status": "error", "message": "One or both analysis records not found."}), 404
+
+        diff = generate_side_by_side_diff(rec_a, rec_b)
+        return jsonify({
+            "status": "success",
+            "diff": diff
+        }), 200
+    except Exception as e:
+        logger.error(f"Error computing diff between {id_a} and {id_b}: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000

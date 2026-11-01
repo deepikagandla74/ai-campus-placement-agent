@@ -100,24 +100,34 @@
                   <div class="tab-pane fade show active" id="pdf-pane" role="tabpanel">
                     <div class="upload-area" id="uploadArea">
                       <i class="fa-solid fa-cloud-arrow-up upload-icon" id="uploadIcon"></i>
-                      <p class="mb-1 fw-medium text-dark" id="uploadPromptText">Drag and drop your PDF or DOCX resume here, or click to browse</p>
-                      <span class="text-muted small" id="uploadSubText">Supports text-based .pdf and .docx formats</span>
-                    <div class="upload-area position-relative" id="uploadArea">
-                      <i class="fa-solid fa-cloud-arrow-up upload-icon" id="uploadIcon"></i>
-                      <p class="mb-1 fw-medium text-dark" id="uploadPromptText">Drag and drop your resume here, or click to browse</p>
-                      <span class="text-muted small" id="uploadSubText">Supports .pdf and .docx documents (max 10MB)</span>
-                      <div id="fileFeedbackBadge" class="mt-2 d-none">
-                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fs-6" id="fileFeedbackBadgeText">
-                          <i class="fa-solid fa-file-check me-1"></i>
-                        </span>
-                        <button type="button" class="btn btn-sm btn-link text-danger ms-2 p-0 text-decoration-none" id="btnRemoveFile" title="Remove selected file">
+                      <p class="mb-1 fw-medium text-dark" id="uploadPromptText">Drag and drop your PDF or DOCX resume
+                        here, or click to browse</p>
+                      <span class="text-muted small" id="uploadSubText">Supports text-based .pdf and .docx
+                        formats</span>
+                      <input type="file" name="resume" id="resumeInput"
+                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        class="d-none">
+                    </div>
+
+                    <!-- File Feedback Badge Container -->
+                    <div id="fileFeedbackBadge" class="mt-2 d-none">
+                      <span
+                        class="badge bg-success-subtle text-success border border-success-subtle p-2 d-inline-flex align-items-center gap-2 rounded-pill">
+                        <i class="fa-solid fa-file-check"></i>
+                        <span id="fileFeedbackBadgeText">Selected file</span>
+                        <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" id="btnRemoveFile"
+                          title="Remove selected file">
                           <i class="fa-solid fa-xmark"></i> Remove
                         </button>
-                      </div>
-                      <div id="uploadTypeErrorAlert" class="alert alert-danger py-2 px-3 mt-3 mb-0 small d-none" role="alert">
-                        <i class="fa-solid fa-triangle-exclamation me-1"></i> <span id="uploadTypeErrorMessage">Unsupported file format. Please upload a .pdf or .docx resume file.</span>
-                      </div>
-                      <input type="file" name="resume" id="resumeInput" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="d-none">
+                      </span>
+                    </div>
+
+                    <!-- Unsupported File Type Error Alert -->
+                    <div id="uploadTypeErrorAlert"
+                      class="alert alert-danger d-none mt-2 p-2 small d-flex align-items-center gap-2 rounded-3"
+                      role="alert">
+                      <i class="fa-solid fa-triangle-exclamation"></i>
+                      <span id="uploadTypeErrorMessage">Unsupported file type. Please upload a PDF or DOCX file.</span>
                     </div>
 
                     <!-- File Feedback Badge Container -->
@@ -166,6 +176,20 @@
                   class="btn btn-sm btn-outline-primary mt-2 rounded-pill w-100 w-sm-auto py-2">
                   <i class="fa-solid fa-building me-1"></i> Explore Company Hiring Guide
                 </button>
+              </div>
+
+              <!-- Candidate Profile / Student ID for Multi-Version Progress Tracking -->
+              <div class="mb-4">
+                <label for="studentIdInput"
+                  class="form-label fw-semibold text-secondary d-flex justify-content-between align-items-center">
+                  <span><i class="fa-solid fa-id-badge text-primary me-1"></i> Candidate Profile Identifier <small
+                      class="text-muted fw-normal">(Optional)</small></span>
+                  <span class="badge bg-light text-muted border rounded-pill">Version Tracking</span>
+                </label>
+                <input type="text" name="student_id" id="studentIdInput" class="form-control rounded-3"
+                  placeholder="e.g. roll number or name (e.g. student_2026_01)">
+                <div class="form-text small">Use the same profile ID when re-uploading revised resumes to track
+                  longitudinal ATS improvements.</div>
               </div>
 
               <!-- Submit button -->
