@@ -403,52 +403,228 @@ function initFormUpload() {
     });
   }
 
-  // Intercept form submit to show animated Agent Progress panel
+  const progressTitle = document.getElementById("progressTitle");
+  const progressSubtitle = document.getElementById("progressSubtitle");
+  const analysisProgressBar = document.getElementById("analysisProgressBar");
+  const progressSpinner = document.getElementById("progressSpinner");
+  const progressErrorAlert = document.getElementById("progressErrorAlert");
+  const progressErrorMessage = document.getElementById("progressErrorMessage");
+  const btnCloseProgressError = document.getElementById("btnCloseProgressError");
+
+  if (btnCloseProgressError) {
+    btnCloseProgressError.addEventListener("click", () => {
+      if (progressOverlay) progressOverlay.classList.add("d-none");
+      if (progressSpinner) progressSpinner.classList.remove("d-none");
+      if (progressErrorAlert) progressErrorAlert.classList.add("d-none");
+    });
+  }
+
+  const stepOrder = ["step1", "step2", "step3", "step4", "step5", "step6"];
+
+  function resetProgressPanel() {
+    if (progressSpinner) progressSpinner.classList.remove("d-none");
+    if (progressErrorAlert) progressErrorAlert.classList.add("d-none");
+    if (progressTitle) progressTitle.textContent = "Coordinating AI Agents";
+    if (progressSubtitle) progressSubtitle.textContent = "Orchestrating multi-agent analysis in progress...";
+    if (analysisProgressBar) {
+      analysisProgressBar.style.width = "5%";
+      analysisProgressBar.setAttribute("aria-valuenow", "5");
+      analysisProgressBar.classList.add("progress-bar-animated");
+    }
+
+    stepOrder.forEach((stepId, idx) => {
+      const el = document.getElementById(stepId);
+      if (el) {
+        el.className = "progress-step text-muted";
+        const ind = el.querySelector(".step-indicator");
+        if (ind) ind.textContent = String(idx + 1);
+      }
+    });
+  }
+
+  function startPolling(statusUrl, onMilestone, onError) {
+    if (!statusUrl) return;
+    let pollCount = 0;
+    const maxPolls = 120; // 2 minutes max
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      try {
+        const res = await fetch(statusUrl);
+        if (!res.ok) throw new Error("Status check failed");
+        const statusData = await res.json();
+
+        if (statusData.milestones && statusData.milestones.length > 0) {
+          const latest = statusData.milestones[statusData.milestones.length - 1];
+          onMilestone(latest);
+        }
+
+        if (statusData.status === "completed") {
+          clearInterval(pollInterval);
+          onMilestone({
+            status: "completed",
+            step: "completed",
+            progress: 100,
+            redirect_url: statusData.redirect_url,
+            message: "Multi-agent placement analysis complete! Redirecting..."
+          });
+        } else if (statusData.status === "error") {
+          clearInterval(pollInterval);
+          onError(statusData.error_message || "Analysis pipeline encountered an error.");
+        } else if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          onError("Analysis pipeline timed out. Please try again.");
+        }
+      } catch (err) {
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          onError("Failed to poll analysis status: " + err.message);
+        }
+      }
+    }, 1000);
+  }
+
+  // Intercept form submit to launch async pipeline & stream milestones via EventSource
   uploadForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+
     const textInput = document.getElementById("resumeTextInput");
     const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
     const hasText = textInput && textInput.value.trim().length > 0;
 
     if (!hasFile && !hasText) {
       alert("Please upload a PDF or DOCX resume, or paste your resume text first.");
-      e.preventDefault();
       return;
     }
 
-    // Display progress overlay
-    progressOverlay.classList.remove("d-none");
+    // Display and reset progress overlay
+    resetProgressPanel();
+    if (progressOverlay) progressOverlay.classList.remove("d-none");
 
-    const steps = [
-      { id: "step1", delay: 0 },
-      { id: "step2", delay: 1500 },
-      { id: "step3", delay: 3200 },
-      { id: "step4", delay: 4800 },
-      { id: "step5", delay: 6500 },
-      { id: "step6", delay: 8000 }
-    ];
+    let eventSource = null;
 
-    // Trigger step updates sequentially
-    steps.forEach((step, idx) => {
-      setTimeout(() => {
-        const element = document.getElementById(step.id);
-        if (element) {
-          element.classList.remove("text-muted");
-          
-          // Mark previous steps as completed
-          if (idx > 0) {
-            const prevElement = document.getElementById(steps[idx - 1].id);
-            if (prevElement) {
-              prevElement.classList.remove("active");
-              prevElement.classList.add("completed");
-              const indicator = prevElement.querySelector(".step-indicator");
-              if (indicator) indicator.innerHTML = "✓";
-            }
+    function handleMilestone(milestone) {
+      const step = milestone.step;
+      const progress = milestone.progress || 0;
+      const message = milestone.message || "";
+      const status = milestone.status;
+
+      if (analysisProgressBar) {
+        analysisProgressBar.style.width = `${progress}%`;
+        analysisProgressBar.setAttribute("aria-valuenow", String(progress));
+      }
+
+      if (progressSubtitle && message) {
+        progressSubtitle.textContent = message;
+      }
+
+      if (step && step.startsWith("step")) {
+        const currentIdx = stepOrder.indexOf(step);
+        stepOrder.forEach((sId, idx) => {
+          const el = document.getElementById(sId);
+          if (!el) return;
+          const ind = el.querySelector(".step-indicator");
+          if (idx < currentIdx) {
+            el.className = "progress-step completed";
+            if (ind) ind.innerHTML = "✓";
+          } else if (idx === currentIdx) {
+            el.className = "progress-step active";
+          } else {
+            el.className = "progress-step text-muted";
           }
-          
-          element.classList.add("active");
+        });
+      }
+
+      if (status === "completed" || step === "completed") {
+        stepOrder.forEach((sId) => {
+          const el = document.getElementById(sId);
+          if (el) {
+            el.className = "progress-step completed";
+            const ind = el.querySelector(".step-indicator");
+            if (ind) ind.innerHTML = "✓";
+          }
+        });
+
+        if (analysisProgressBar) {
+          analysisProgressBar.style.width = "100%";
+          analysisProgressBar.classList.remove("progress-bar-animated");
         }
-      }, step.delay);
-    });
+        if (progressTitle) progressTitle.textContent = "Analysis Complete!";
+        if (progressSubtitle) progressSubtitle.textContent = "Redirecting to your comprehensive placement dashboard...";
+
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+
+        const redirectUrl = milestone.redirect_url ||
+          (milestone.extra && milestone.extra.redirect_url) ||
+          "/";
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 500);
+      } else if (status === "error" || step === "error") {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        showPipelineError(milestone.message || "An unexpected error occurred during multi-agent analysis.");
+      }
+    }
+
+    function showPipelineError(errMsg) {
+      if (progressSpinner) progressSpinner.classList.add("d-none");
+      if (progressErrorAlert && progressErrorMessage) {
+        progressErrorMessage.textContent = errMsg;
+        progressErrorAlert.classList.remove("d-none");
+      } else {
+        alert(errMsg);
+        if (progressOverlay) progressOverlay.classList.add("d-none");
+      }
+    }
+
+    const formData = new FormData(uploadForm);
+
+    fetch("/api/analysis/start", {
+      method: "POST",
+      body: formData
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to initiate background analysis.");
+        }
+
+        const streamUrl = data.stream_url;
+        const statusUrl = data.status_url;
+
+        if (window.EventSource && streamUrl) {
+          eventSource = new EventSource(streamUrl);
+
+          eventSource.onmessage = (event) => {
+            try {
+              const milestone = JSON.parse(event.data);
+              handleMilestone(milestone);
+            } catch (jsonErr) {
+              console.error("Failed to parse SSE JSON payload:", jsonErr);
+            }
+          };
+
+          eventSource.onerror = (err) => {
+            console.warn("EventSource disconnected; switching to polling fallback.", err);
+            if (eventSource) {
+              eventSource.close();
+              eventSource = null;
+            }
+            startPolling(statusUrl, handleMilestone, showPipelineError);
+          };
+        } else {
+          startPolling(statusUrl, handleMilestone, showPipelineError);
+        }
+      })
+      .catch((err) => {
+        console.error("Async analysis dispatch failed:", err);
+        showPipelineError(err.message || "Could not start analysis. Please check your network and retry.");
+      });
   });
 }
 
