@@ -34,6 +34,7 @@ from utils.gemini import (
 from utils.report_generator import generate_pdf_report
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
+from agents.coding_agent import CodingAssessmentAgent
 
 # Configure structured application logging
 logging.basicConfig(
@@ -66,6 +67,7 @@ except Exception as db_err:
 # Instantiate coordination and specialized interview agents
 coordinator_agent = CoordinatorAgent()
 live_interview_agent = InterviewAgent()
+coding_assessment_agent = CodingAssessmentAgent()
 
 def get_available_companies() -> list:
     """
@@ -372,6 +374,88 @@ def submit_interview_answer(analysis_id: str):
     except Exception as e:
         logger.error(f"Failed to process answer submission: {str(e)}")
         return jsonify({"error": f"Internal process error evaluating response: {str(e)}"}), 500
+
+
+@app.route("/api/interview/<analysis_id>/coding-problem", methods=["GET"])
+@app.route("/api/interview/coding-problem", methods=["GET"])
+def api_interview_coding_problem(analysis_id: str = None):
+    """
+    Returns a company-targeted DSA coding challenge with starter code and test cases.
+    """
+    try:
+        company_name = request.args.get("company", "").strip()
+        if not company_name and analysis_id:
+            record = get_analysis(analysis_id)
+            if record:
+                company_name = record.get("company_name", "General")
+        if not company_name:
+            company_name = "General"
+
+        difficulty = request.args.get("difficulty", "Medium").strip()
+        category = request.args.get("category", None)
+        if category:
+            category = category.strip()
+
+        problem = coding_assessment_agent.generate_problem(
+            company_name=company_name,
+            difficulty=difficulty,
+            category=category,
+        )
+
+        return jsonify({
+            "status": "success",
+            "problem": problem
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error generating coding challenge: {str(e)}")
+        fallback = coding_assessment_agent.get_fallback_problem("General", "Medium")
+        return jsonify({
+            "status": "success",
+            "problem": fallback,
+            "fallback": True
+        }), 200
+
+
+@app.route("/api/interview/<analysis_id>/evaluate-code", methods=["POST"])
+@app.route("/api/interview/evaluate-code", methods=["POST"])
+def api_evaluate_code(analysis_id: str = None):
+    """
+    Evaluates candidate code submission against problem statement and test cases.
+    Returns correctness score, test-case pass/fail breakdown, and Big-O complexity.
+    """
+    try:
+        payload = request.get_json() or {}
+        code = payload.get("code", "")
+        language = payload.get("language", "python")
+        problem = payload.get("problem")
+
+        if not isinstance(problem, dict) or not problem:
+            company = "General"
+            if analysis_id:
+                rec = get_analysis(analysis_id)
+                if rec:
+                    company = rec.get("company_name", "General")
+            problem = coding_assessment_agent.get_fallback_problem(company)
+
+        eval_result = coding_assessment_agent.evaluate_code(
+            problem=problem,
+            language=language,
+            code=code
+        )
+
+        return jsonify({
+            "status": "success",
+            "evaluation": eval_result,
+            **eval_result
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error evaluating candidate code: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Code evaluation failed: {str(e)}"
+        }), 500
 
 
 @app.route("/interview/<analysis_id>/export")
