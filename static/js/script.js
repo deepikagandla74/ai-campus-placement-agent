@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initCompanyExplorer();
   initSkillGapFilter();
   initRoadmapExport();
+  initCodingSandbox();
 });
 
 function initThemeToggle() {
@@ -1344,3 +1345,311 @@ function initRoadmapExport() {
     });
   }
 }
+
+/**
+ * Multi-Version Resume Comparison & Longitudinal Progress Tracker
+ * - Initializes Chart.js line/area chart showing ATS Score, Job Match %, and Skill Gaps over time
+ * - Supports theme-reactive colors for gridlines and text
+ * - Manages interactive side-by-side diff modal and dynamic baseline selection
+ */
+function initProgressTracker() {
+  const trackerCard = document.getElementById("progressTrackerCard");
+  if (!trackerCard) return;
+
+  const trendRaw = trackerCard.getAttribute("data-trend");
+  let trendData = null;
+  try {
+    trendData = trendRaw ? JSON.parse(trendRaw) : null;
+  } catch (err) {
+    console.warn("Could not parse trend data for Chart.js:", err);
+  }
+
+  // 1. Initialize Chart.js longitudinal trend chart
+  const canvas = document.getElementById("progressTrendChart");
+  if (canvas && window.Chart && trendData && Array.isArray(trendData.labels) && trendData.labels.length > 0) {
+    const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
+    const textColor = isDark ? "#c4c7c5" : "#444746";
+    const gridColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
+
+    const ctx = canvas.getContext("2d");
+    const progressChart = new window.Chart(ctx, {
+      type: "line",
+      data: {
+        labels: trendData.labels,
+        datasets: [
+          {
+            label: "ATS Profile Score",
+            data: trendData.ats_scores,
+            borderColor: "#1a73e8",
+            backgroundColor: "rgba(26, 115, 232, 0.12)",
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#1a73e8",
+            yAxisID: "y"
+          },
+          {
+            label: "Job Match %",
+            data: trendData.match_scores,
+            borderColor: "#34a853",
+            backgroundColor: "rgba(52, 168, 83, 0.08)",
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: "#34a853",
+            yAxisID: "y"
+          },
+          {
+            label: "Skill Gaps Count",
+            data: trendData.gap_counts,
+            borderColor: "#ea4335",
+            borderDash: [5, 5],
+            backgroundColor: "transparent",
+            fill: false,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: "#ea4335",
+            yAxisID: "y1"
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: "index",
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              boxWidth: 14,
+              font: { size: 12, family: "'Outfit', sans-serif" },
+              color: textColor
+            }
+          },
+          tooltip: {
+            backgroundColor: isDark ? "#282a2c" : "#ffffff",
+            titleColor: isDark ? "#e3e3e3" : "#1f1f1f",
+            bodyColor: isDark ? "#c4c7c5" : "#444746",
+            borderColor: isDark ? "#444746" : "#dadce0",
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              title: function (items) {
+                const idx = items[0].dataIndex;
+                const date = trendData.dates && trendData.dates[idx] ? trendData.dates[idx] : "";
+                const filename = trendData.filenames && trendData.filenames[idx] ? trendData.filenames[idx] : "";
+                return `Iteration ${trendData.labels[idx]} (${date}) - ${filename}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: textColor, font: { family: "'Outfit', sans-serif" } }
+          },
+          y: {
+            type: "linear",
+            display: true,
+            position: "left",
+            min: 0,
+            max: 100,
+            grid: { color: gridColor },
+            ticks: {
+              color: textColor,
+              callback: val => `${val}%`,
+              font: { family: "'Outfit', sans-serif" }
+            }
+          },
+          y1: {
+            type: "linear",
+            display: true,
+            position: "right",
+            min: 0,
+            suggestedMax: 8,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: "#ea4335",
+              precision: 0,
+              font: { family: "'Outfit', sans-serif" }
+            }
+          }
+        }
+      }
+    });
+
+    // Theme toggle listener to update chart colors
+    const observer = new MutationObserver(() => {
+      const darkNow = document.documentElement.getAttribute("data-bs-theme") === "dark";
+      const newTextColor = darkNow ? "#c4c7c5" : "#444746";
+      const newGridColor = darkNow ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
+
+      if (progressChart) {
+        progressChart.options.scales.x.ticks.color = newTextColor;
+        progressChart.options.scales.x.grid.color = newGridColor;
+        progressChart.options.scales.y.ticks.color = newTextColor;
+        progressChart.options.scales.y.grid.color = newGridColor;
+        progressChart.options.plugins.legend.labels.color = newTextColor;
+        progressChart.update();
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
+  }
+
+  // 2. Interactive side-by-side diff modal dropdown switcher
+  const diffModal = document.getElementById("versionDiffModal");
+  const selectBaseline = document.getElementById("selectDiffBaseline");
+  const diffLoadingSpinner = document.getElementById("diffLoadingSpinner");
+  const diffContentArea = document.getElementById("diffContentArea");
+
+  if (diffModal && selectBaseline) {
+    const currentAnalysisId = diffModal.getAttribute("data-current-id");
+
+    selectBaseline.addEventListener("change", async () => {
+      const baselineId = selectBaseline.value;
+      if (!baselineId || !currentAnalysisId) return;
+
+      if (diffLoadingSpinner) diffLoadingSpinner.classList.remove("d-none");
+      if (diffContentArea) diffContentArea.classList.add("opacity-25");
+
+      try {
+        const response = await fetch(`/api/progress/diff/${baselineId}/${currentAnalysisId}`);
+        const data = await response.json();
+
+        if (data.status === "success" && data.diff) {
+          renderDiffModalContent(data.diff);
+        }
+      } catch (err) {
+        console.error("Failed to fetch version diff comparison:", err);
+      } finally {
+        if (diffLoadingSpinner) diffLoadingSpinner.classList.add("d-none");
+        if (diffContentArea) diffContentArea.classList.remove("opacity-25");
+      }
+    });
+  }
+
+  function renderDiffModalContent(diff) {
+    const a = diff.version_a || {};
+    const b = diff.version_b || {};
+    const d = diff.delta || {};
+
+    const aTitle = document.getElementById("diffVersionATitle");
+    const aScore = document.getElementById("diffVersionAScore");
+    const aKeywords = document.getElementById("diffVersionAKeywords");
+    const aMissing = document.getElementById("diffVersionAMissing");
+    const aGaps = document.getElementById("diffVersionAGaps");
+
+    const bTitle = document.getElementById("diffVersionBTitle");
+    const bScore = document.getElementById("diffVersionBScore");
+    const bNewKeywords = document.getElementById("diffVersionBNewKeywords");
+    const bResolvedGaps = document.getElementById("diffVersionBResolvedGaps");
+    const bKeywords = document.getElementById("diffVersionBKeywords");
+
+    if (aTitle) aTitle.innerHTML = `<i class="fa-solid fa-clock-rotate-left me-1"></i> Version ${a.version_number} (Baseline)`;
+    if (aScore) aScore.innerText = `ATS: ${a.ats_score}/100`;
+
+    if (aKeywords) {
+      aKeywords.innerHTML = "";
+      const kwList = Array.isArray(a.keywords_found) ? a.keywords_found : [];
+      if (kwList.length > 0) {
+        kwList.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-white text-secondary border rounded-pill";
+          span.innerText = k;
+          aKeywords.appendChild(span);
+        });
+      } else {
+        aKeywords.innerHTML = '<span class="text-muted small">None recorded</span>';
+      }
+    }
+
+    if (aMissing) {
+      aMissing.innerHTML = "";
+      const mList = Array.isArray(a.keywords_missing) ? a.keywords_missing : [];
+      if (mList.length > 0) {
+        mList.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill";
+          span.innerText = k;
+          aMissing.appendChild(span);
+        });
+      } else {
+        aMissing.innerHTML = '<span class="text-muted small">None</span>';
+      }
+    }
+
+    if (aGaps) {
+      aGaps.innerHTML = "";
+      const gList = Array.isArray(a.skill_gaps) ? a.skill_gaps : [];
+      gList.forEach(g => {
+        const div = document.createElement("div");
+        div.className = "text-secondary mb-1";
+        div.innerHTML = `<i class="fa-solid fa-circle-minus me-1 text-danger"></i> ${escapeHtml(g)}`;
+        aGaps.appendChild(div);
+      });
+    }
+
+    if (bTitle) bTitle.innerHTML = `<i class="fa-solid fa-star me-1"></i> Version ${b.version_number} (Active)`;
+    if (bScore) bScore.innerText = `ATS: ${b.ats_score}/100`;
+
+    if (bNewKeywords) {
+      bNewKeywords.innerHTML = "";
+      const newly = Array.isArray(d.newly_matched_keywords) ? d.newly_matched_keywords : [];
+      if (newly.length > 0) {
+        newly.forEach(k => {
+          const span = document.createElement("span");
+          span.className = "badge bg-success text-white rounded-pill";
+          span.innerHTML = `<i class="fa-solid fa-plus me-1"></i>${escapeHtml(k)}`;
+          bNewKeywords.appendChild(span);
+        });
+      } else {
+        bNewKeywords.innerHTML = '<span class="text-muted small">No new keywords identified in this iteration</span>';
+      }
+    }
+
+    if (bResolvedGaps) {
+      bResolvedGaps.innerHTML = "";
+      const resolved = Array.isArray(d.resolved_skill_gaps) ? d.resolved_skill_gaps : [];
+      if (resolved.length > 0) {
+        resolved.forEach(g => {
+          const span = document.createElement("span");
+          span.className = "badge bg-primary text-white rounded-pill";
+          span.innerHTML = `<i class="fa-solid fa-check me-1"></i>${escapeHtml(g)}`;
+          bResolvedGaps.appendChild(span);
+        });
+      } else {
+        bResolvedGaps.innerHTML = '<span class="text-muted small">None resolved in this iteration</span>';
+      }
+    }
+
+    if (bKeywords) {
+      bKeywords.innerHTML = "";
+      const bKw = Array.isArray(b.keywords_found) ? b.keywords_found : [];
+      bKw.forEach(k => {
+        const span = document.createElement("span");
+        span.className = "badge bg-white text-dark border rounded-pill";
+        span.innerText = k;
+        bKeywords.appendChild(span);
+      });
+    }
+  }
+
+  function escapeHtml(str) {
+    if (typeof str !== "string") str = String(str);
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+}
+

@@ -195,3 +195,130 @@ Provide feedback and ratings in JSON format matching this schema:
 }}
 Ensure the response is valid JSON only.
 """
+
+# ==============================================================================
+# Coding Assessment & DSA Sandbox Prompts
+# ==============================================================================
+
+CODING_PROBLEM_SYSTEM_INSTRUCTION = """
+You are a senior algorithmic engineering interviewer and competitive programming author for campus placements.
+Your job is to generate a realistic Data Structures and Algorithms (DSA) coding problem tailored to a target company's hiring style.
+Provide clean boilerplate code in Python, C++, and Java, plus test cases and constraints.
+Do not output markdown code fences, preambles, or explanations. Respond with valid JSON only.
+"""
+
+CODING_PROBLEM_PROMPT_TEMPLATE = """
+Generate a DSA coding challenge tailored for campus recruitment at {company_name}.
+Difficulty: {difficulty}
+Category / Topic Preference: {category}
+
+Return a valid JSON object matching this schema:
+{{
+  "title": "Problem Title",
+  "difficulty": "{difficulty}",
+  "category": "Data Structures / Algorithms topic",
+  "company": "{company_name}",
+  "description": "Clear and detailed problem statement describing the algorithmic task.",
+  "input_format": "Detailed explanation of input parameters.",
+  "output_format": "Detailed explanation of return value.",
+  "constraints": [
+    "1 <= N <= 10^5",
+    "Time complexity requirement: O(N) or O(N log N)"
+  ],
+  "examples": [
+    {{
+      "input": "Sample input representation",
+      "output": "Sample output representation",
+      "explanation": "Brief explanation of how the result is obtained."
+    }}
+  ],
+  "starter_code": {{
+    "python": "def solve(nums: list[int], target: int) -> list[int]:\\n    # Write your solution here\\n    pass",
+    "cpp": "#include <vector>\\nusing namespace std;\\n\\nclass Solution {{\\npublic:\\n    vector<int> solve(vector<int>& nums, int target) {{\\n        // Write your solution here\\n        return {{}};\\n    }}\\n}};",
+    "java": "import java.util.*;\\n\\nclass Solution {{\\n    public int[] solve(int[] nums, int target) {{\\n        // Write your solution here\\n        return new int[]{{}};\\n    }}\\n}}"
+  }},
+  "test_cases": [
+    {{
+      "id": 1,
+      "input": "nums = [2, 7, 11, 15], target = 9",
+      "expected_output": "[0, 1]",
+      "is_hidden": false
+    }},
+    {{
+      "id": 2,
+      "input": "nums = [3, 2, 4], target = 6",
+      "expected_output": "[1, 2]",
+      "is_hidden": false
+    }},
+    {{
+      "id": 3,
+      "input": "nums = [3, 3], target = 6",
+      "expected_output": "[0, 1]",
+      "is_hidden": true
+    }}
+  ]
+}}
+Ensure the response is valid JSON only.
+"""
+
+CODING_EVAL_SYSTEM_INSTRUCTION = """
+You are an expert technical interviewer, automated code evaluator, and algorithm optimization coach.
+Your job is to evaluate candidate source code submitted for a coding challenge.
+Assess:
+1. Algorithmic correctness and handling of edge cases against the given test cases.
+2. Big-O Time Complexity and Space Complexity with clear explanation.
+3. Code quality, maintainability, clean coding principles, and variable naming.
+4. Concrete performance and optimization recommendations.
+
+Respond strictly with valid JSON without any markdown code fences, preamble, or commentary.
+"""
+
+CODING_EVAL_PROMPT_TEMPLATE = """
+Evaluate the candidate's submitted code against the DSA problem below.
+
+Problem: {problem_title}
+Description: {problem_description}
+Constraints: {constraints}
+Test Cases: {test_cases}
+
+Language: {language}
+Candidate's Solution Code:
+```
+{candidate_code}
+```
+
+Return a structured JSON evaluation matching this schema:
+{{
+  "correctness_score": 90,
+  "code_quality_score": 85,
+  "all_passed": true,
+  "test_case_results": [
+    {{
+      "id": 1,
+      "input": "nums = [2, 7, 11, 15], target = 9",
+      "expected": "[0, 1]",
+      "actual": "[0, 1]",
+      "passed": true,
+      "explanation": "Correct result computed."
+    }},
+    {{
+      "id": 2,
+      "input": "nums = [3, 2, 4], target = 6",
+      "expected": "[1, 2]",
+      "actual": "[1, 2]",
+      "passed": true,
+      "explanation": "Correct result computed."
+    }}
+  ],
+  "time_complexity": "O(N)",
+  "time_complexity_explanation": "Single-pass traversal using a hash map.",
+  "space_complexity": "O(N)",
+  "space_complexity_explanation": "Auxiliary hash map storing at most N elements.",
+  "optimization_suggestions": [
+    "First suggestion on efficiency or boundary checks.",
+    "Second suggestion on code readability or memory usage."
+  ],
+  "feedback": "A concise paragraph summarizing algorithmic approach, correctness, and areas for refinement."
+}}
+Ensure the response is valid JSON only.
+"""

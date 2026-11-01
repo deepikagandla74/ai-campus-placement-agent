@@ -26,7 +26,14 @@ from utils.database import (
     delete_analysis,
     create_interview_session,
     get_interview_session,
-    update_interview_session
+    update_interview_session,
+    get_student_versions,
+    get_previous_analysis
+)
+from utils.progress_tracker import (
+    calculate_version_delta,
+    build_longitudinal_series,
+    generate_side_by_side_diff
 )
 from utils.pdf_reader import (
     extract_text_from_pdf,
@@ -35,6 +42,11 @@ from utils.pdf_reader import (
     validate_resume_text,
     MAX_RESUME_TEXT_CHARS,
     ALLOWED_RESUME_EXTENSIONS,
+)
+from utils.gemini import (
+    AIAnalysisError,
+    AIRateLimitError,
+    format_ai_error_for_user,
 )
 from utils.report_generator import generate_pdf_report
 from utils.gemini import (
@@ -49,6 +61,7 @@ from utils.async_pipeline import (
 )
 from agents.coordinator import CoordinatorAgent
 from agents.interview_agent import InterviewAgent
+from agents.coding_agent import CodingAssessmentAgent
 
 # Configure structured application logging
 logging.basicConfig(
@@ -81,6 +94,7 @@ except Exception as db_err:
 # Instantiate coordination and specialized interview agents
 coordinator_agent = CoordinatorAgent()
 live_interview_agent = InterviewAgent()
+coding_assessment_agent = CodingAssessmentAgent()
 
 def get_available_companies() -> list:
     """
@@ -244,7 +258,8 @@ def analyze():
             resume_filename=resume_filename,
             company_name=selected_company,
             job_description=job_description,
-            results_dict=analysis_payload
+            results_dict=analysis_payload,
+            student_id=candidate_student_id
         )
 
         return redirect(url_for("dashboard", analysis_id=file_uuid))
@@ -367,17 +382,34 @@ def get_analysis_task_status(task_id: str):
 @app.route("/dashboard/<analysis_id>")
 def dashboard(analysis_id: str) -> str:
     """
-    Loads and renders the candidate evaluation dashboard.
+    Loads and renders the candidate evaluation dashboard with longitudinal
+    progress trends and multi-version delta analysis.
     """
     analysis_record = get_analysis(analysis_id)
     if not analysis_record:
         flash("The requested placement analysis report could not be found.", "error")
         return redirect(url_for("index"))
 
+    student_id = analysis_record.get("student_id") or "default_student"
+    all_versions = get_student_versions(student_id)
+    if not all_versions:
+        all_versions = [analysis_record]
+
+    current_version = analysis_record.get("version_number", 1)
+    previous_record = get_previous_analysis(student_id, current_version=current_version)
+    delta_data = calculate_version_delta(analysis_record, previous_record)
+    trend_series = build_longitudinal_series(all_versions)
+
     return render_template(
         "dashboard.html",
         analysis=analysis_record,
-        analysis_id=analysis_id
+        analysis_id=analysis_id,
+        versions=all_versions,
+        current_version=current_version,
+        previous_record=previous_record,
+        delta_data=delta_data,
+        trend_series=trend_series,
+        trend_series_json=json.dumps(trend_series)
     )
 
 @app.route("/interview/<analysis_id>")
@@ -524,6 +556,88 @@ def submit_interview_answer(analysis_id: str):
         return jsonify({"error": f"Internal process error evaluating response: {str(e)}"}), 500
 
 
+@app.route("/api/interview/<analysis_id>/coding-problem", methods=["GET"])
+@app.route("/api/interview/coding-problem", methods=["GET"])
+def api_interview_coding_problem(analysis_id: str = None):
+    """
+    Returns a company-targeted DSA coding challenge with starter code and test cases.
+    """
+    try:
+        company_name = request.args.get("company", "").strip()
+        if not company_name and analysis_id:
+            record = get_analysis(analysis_id)
+            if record:
+                company_name = record.get("company_name", "General")
+        if not company_name:
+            company_name = "General"
+
+        difficulty = request.args.get("difficulty", "Medium").strip()
+        category = request.args.get("category", None)
+        if category:
+            category = category.strip()
+
+        problem = coding_assessment_agent.generate_problem(
+            company_name=company_name,
+            difficulty=difficulty,
+            category=category,
+        )
+
+        return jsonify({
+            "status": "success",
+            "problem": problem
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error generating coding challenge: {str(e)}")
+        fallback = coding_assessment_agent.get_fallback_problem("General", "Medium")
+        return jsonify({
+            "status": "success",
+            "problem": fallback,
+            "fallback": True
+        }), 200
+
+
+@app.route("/api/interview/<analysis_id>/evaluate-code", methods=["POST"])
+@app.route("/api/interview/evaluate-code", methods=["POST"])
+def api_evaluate_code(analysis_id: str = None):
+    """
+    Evaluates candidate code submission against problem statement and test cases.
+    Returns correctness score, test-case pass/fail breakdown, and Big-O complexity.
+    """
+    try:
+        payload = request.get_json() or {}
+        code = payload.get("code", "")
+        language = payload.get("language", "python")
+        problem = payload.get("problem")
+
+        if not isinstance(problem, dict) or not problem:
+            company = "General"
+            if analysis_id:
+                rec = get_analysis(analysis_id)
+                if rec:
+                    company = rec.get("company_name", "General")
+            problem = coding_assessment_agent.get_fallback_problem(company)
+
+        eval_result = coding_assessment_agent.evaluate_code(
+            problem=problem,
+            language=language,
+            code=code
+        )
+
+        return jsonify({
+            "status": "success",
+            "evaluation": eval_result,
+            **eval_result
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error evaluating candidate code: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Code evaluation failed: {str(e)}"
+        }), 500
+
+
 @app.route("/interview/<analysis_id>/export")
 def export_interview_json(analysis_id: str):
     """
@@ -657,6 +771,47 @@ def api_delete_analysis(analysis_id: str):
             "status": "error",
             "message": "Failed to delete analysis record."
         }), 500
+
+@app.route("/api/progress/<student_id>", methods=["GET"])
+def api_student_progress(student_id: str):
+    """
+    Returns a candidate's full longitudinal version history and trend metrics.
+    """
+    try:
+        versions = get_student_versions(student_id)
+        trend_series = build_longitudinal_series(versions)
+        return jsonify({
+            "status": "success",
+            "student_id": student_id,
+            "total_versions": len(versions),
+            "versions": versions,
+            "trend_series": trend_series
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching progress for student {student_id}: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/progress/diff/<id_a>/<id_b>", methods=["GET"])
+def api_progress_diff(id_a: str, id_b: str):
+    """
+    Generates side-by-side comparison metrics between any two specific resume analyses.
+    """
+    try:
+        rec_a = get_analysis(id_a)
+        rec_b = get_analysis(id_b)
+        if not rec_a or not rec_b:
+            return jsonify({"status": "error", "message": "One or both analysis records not found."}), 404
+
+        diff = generate_side_by_side_diff(rec_a, rec_b)
+        return jsonify({
+            "status": "success",
+            "diff": diff
+        }), 200
+    except Exception as e:
+        logger.error(f"Error computing diff between {id_a} and {id_b}: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000

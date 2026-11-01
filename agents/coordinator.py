@@ -13,6 +13,7 @@ from agents.job_match_agent import JobMatchAgent
 from agents.skill_gap_agent import SkillGapAgent
 from agents.roadmap_agent import RoadmapAgent
 from agents.interview_agent import InterviewAgent
+from utils.pdf_reader import standardize_resume_sections, format_standardized_resume
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +70,20 @@ class CoordinatorAgent:
         company_profile = self._load_company_data(company_name)
         company_profile_str = json.dumps(company_profile, indent=2) if company_profile else "Generic technical engineering placement guidelines."
 
-        # 2. Format the user prompt combining all parameters
+        # 2. Standardize resume sections for cleaner agent consumption
+        parsed_sections = standardize_resume_sections(resume_text)
+        formatted_resume = format_standardized_resume(parsed_sections) if parsed_sections else resume_text
+
+        # 3. Format the user prompt combining all parameters
         job_desc_str = job_description if job_description.strip() else "None provided. Assume General Software Development Engineer Role."
         user_prompt = prompts.ANALYSIS_USER_PROMPT_TEMPLATE.format(
             company_name=company_name,
             company_details=company_profile_str,
             job_description=job_desc_str,
-            resume_text=resume_text
+            resume_text=formatted_resume
         )
 
-        # 3. Call the Gemini API with structured JSON configs
+        # 4. Call the Gemini API with structured JSON configs
         logger.info("CoordinatorAgent: Issuing request to Gemini model.")
         try:
             raw_json_response = generate_json_response(

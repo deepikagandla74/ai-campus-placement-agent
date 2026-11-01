@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import logging
+from typing import Optional, List, Dict, Any
 import config
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,13 @@ def get_db_connection() -> sqlite3.Connection:
 def init_db() -> None:
     """
     Initializes the database tables (analyses, interviews) if they do not exist.
+    Performs migrations to ensure student_id and version_number columns are present.
     """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         
-        # Table 1: Store placement analysis findings
+        # Table 1: Store placement analysis findings with candidate profile & version indexing
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS analyses (
                 id TEXT PRIMARY KEY,
@@ -34,6 +36,8 @@ def init_db() -> None:
                 company_name TEXT NOT NULL,
                 job_description TEXT,
                 results_json TEXT NOT NULL,
+                student_id TEXT DEFAULT 'default_student',
+                version_number INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -51,8 +55,17 @@ def init_db() -> None:
             )
         """)
         
-        # Indexes for query and sorting performance
+        # Schema migration: check if student_id and version_number exist in analyses
+        cursor.execute("PRAGMA table_info(analyses)")
+        existing_cols = [col[1] for col in cursor.fetchall()]
+        if "student_id" not in existing_cols:
+            cursor.execute("ALTER TABLE analyses ADD COLUMN student_id TEXT DEFAULT 'default_student'")
+        if "version_number" not in existing_cols:
+            cursor.execute("ALTER TABLE analyses ADD COLUMN version_number INTEGER DEFAULT 1")
+
+        # Indexes for query, sorting, and version lookup performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses (created_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_analyses_student_version ON analyses (student_id, version_number ASC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_interviews_analysis_id ON interviews (analysis_id)")
         
         conn.commit()
@@ -63,19 +76,46 @@ def init_db() -> None:
     finally:
         conn.close()
 
-def save_analysis(analysis_id: str, resume_filename: str, company_name: str, job_description: str, results_dict: dict) -> None:
+def save_analysis(
+    analysis_id: str,
+    resume_filename: str,
+    company_name: str,
+    job_description: str,
+    results_dict: dict,
+    student_id: Optional[str] = None,
+    version_number: Optional[int] = None
+) -> None:
     """
     Inserts a newly generated coordinator analysis into the database.
+    Automatically assigns candidate student_id and auto-increments version_number if omitted.
     """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        effective_student_id = (student_id or "default_student").strip()
+
+        # Compute next version number if not explicitly specified
+        if version_number is None or version_number <= 0:
+            cursor.execute(
+                "SELECT COALESCE(MAX(version_number), 0) + 1 FROM analyses WHERE student_id = ?",
+                (effective_student_id,)
+            )
+            version_number = cursor.fetchone()[0]
+
         cursor.execute("""
-            INSERT INTO analyses (id, resume_filename, company_name, job_description, results_json)
-            VALUES (?, ?, ?, ?, ?)
-        """, (analysis_id, resume_filename, company_name, job_description, json.dumps(results_dict)))
+            INSERT INTO analyses (id, resume_filename, company_name, job_description, results_json, student_id, version_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            analysis_id,
+            resume_filename,
+            company_name,
+            job_description,
+            json.dumps(results_dict),
+            effective_student_id,
+            version_number
+        ))
         conn.commit()
-        logger.info(f"Analysis saved to database with ID: {analysis_id}")
+        logger.info(f"Analysis saved with ID: {analysis_id} (Student: {effective_student_id}, Version: v{version_number})")
     except Exception as e:
         logger.error(f"Error saving analysis {analysis_id} to database: {str(e)}")
         raise e
@@ -99,6 +139,81 @@ def get_analysis(analysis_id: str) -> dict:
         return None
     except Exception as e:
         logger.error(f"Error fetching analysis {analysis_id}: {str(e)}")
+        raise e
+    finally:
+        conn.close()
+
+def get_student_versions(student_id: str, company_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieves all resume analysis versions for a candidate student_id,
+    ordered by version_number ASC. Deserializes results_json and computes
+    ATS score and match percentage for each version.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        effective_student_id = (student_id or "default_student").strip()
+        
+        if company_name:
+            cursor.execute("""
+                SELECT * FROM analyses
+                WHERE student_id = ? AND company_name = ?
+                ORDER BY version_number ASC, created_at ASC
+            """, (effective_student_id, company_name.strip()))
+        else:
+            cursor.execute("""
+                SELECT * FROM analyses
+                WHERE student_id = ?
+                ORDER BY version_number ASC, created_at ASC
+            """, (effective_student_id,))
+
+        rows = cursor.fetchall()
+        versions = []
+        for row in rows:
+            rec = dict(row)
+            try:
+                rec["results"] = json.loads(rec.get("results_json", "{}"))
+                res_analysis = rec["results"].get("resume_analysis", {})
+                job_match = rec["results"].get("job_match", {})
+                rec["ats_score"] = res_analysis.get("ats_score", 0)
+                rec["match_percentage"] = job_match.get("match_percentage", 0)
+            except Exception:
+                rec["results"] = {}
+                rec["ats_score"] = 0
+                rec["match_percentage"] = 0
+            versions.append(rec)
+        return versions
+    except Exception as e:
+        logger.error(f"Error fetching versions for student {student_id}: {str(e)}")
+        raise e
+    finally:
+        conn.close()
+
+def get_previous_analysis(student_id: str, current_version: int) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves the immediately preceding analysis record for a candidate.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        effective_student_id = (student_id or "default_student").strip()
+        cursor.execute("""
+            SELECT * FROM analyses
+            WHERE student_id = ? AND version_number < ?
+            ORDER BY version_number DESC
+            LIMIT 1
+        """, (effective_student_id, current_version))
+        row = cursor.fetchone()
+        if row:
+            rec = dict(row)
+            try:
+                rec["results"] = json.loads(rec.get("results_json", "{}"))
+            except Exception:
+                rec["results"] = {}
+            return rec
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching previous analysis for student {student_id} (current v{current_version}): {str(e)}")
         raise e
     finally:
         conn.close()

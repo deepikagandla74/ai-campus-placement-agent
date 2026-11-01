@@ -731,3 +731,40 @@ html, body {
     padding: 8px 14px;
   }
 }
+
+/* ==============================================================================
+   DSA Coding Sandbox & Monaco Editor Styles
+   ============================================================================== */
+#monacoEditorContainer {
+  border: 1px solid var(--border-color);
+  background-color: #fffffe;
+  transition: border-color 0.2s ease-in-out;
+}
+
+[data-bs-theme="dark"] #monacoEditorContainer {
+  background-color: #1e1e1e;
+  border-color: #3c4043;
+}
+
+#codeTextareaFallback {
+  resize: vertical;
+  min-height: 380px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+[data-bs-theme="dark"] #codeTextareaFallback {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-color: #3c4043;
+}
+
+.test-case-card {
+  transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.test-case-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}

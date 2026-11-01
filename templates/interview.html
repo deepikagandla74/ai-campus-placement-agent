@@ -34,8 +34,27 @@
   </nav>
 
   <!-- Main Interview Simulator -->
-  <main class="container py-5 fade-in">
-    <div class="row g-4">
+  <main class="container py-5 fade-in" data-analysis-id="{{ analysis_id }}" data-company-name="{{ company_name|default('Placement', true) }}">
+    
+    <!-- Interview Mode Switcher: Q&A Interview vs Live DSA Coding Sandbox -->
+    <div class="d-flex justify-content-between align-items-center mb-4 p-2 bg-light rounded-pill border flex-wrap gap-2">
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm rounded-pill px-3 py-2 fw-semibold btn-primary" id="btnModeQA">
+          <i class="fa-solid fa-comments me-1"></i> Mock Q&A Interview
+        </button>
+        <button type="button" class="btn btn-sm rounded-pill px-3 py-2 fw-semibold btn-outline-success border-0" id="btnModeCoding">
+          <i class="fa-solid fa-laptop-code me-1"></i> Live DSA Coding Sandbox
+        </button>
+      </div>
+      <div class="d-none d-md-flex align-items-center gap-2 pe-3">
+        <span class="badge bg-white text-secondary border rounded-pill px-3 py-1 small">
+          <i class="fa-solid fa-building text-primary me-1"></i> Target: {{ company_name|default('Placement', true) }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Q&A Interview Section -->
+    <div class="row g-4" id="qaInterviewSection">
       
       <!-- Chat simulator window (Left 8 columns) -->
       <div class="col-lg-8">
@@ -333,6 +352,169 @@
       </div>
 
     </div>
+    <!-- End Q&A Interview Section -->
+
+    <!-- Interactive DSA & Coding Assessment Sandbox -->
+    <div id="codingSandboxSection" class="d-none">
+      
+      <!-- Challenge Header / Controls -->
+      <div class="card glass-card p-4 border-0 mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <div>
+            <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1 fw-semibold" id="codingCompanyBadge">Target: {{ company_name|default('Placement', true) }}</span>
+              <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill px-3 py-1 fw-semibold" id="codingDifficultyBadge">Medium</span>
+              <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-3 py-1 fw-semibold" id="codingCategoryBadge">Data Structures &amp; Algorithms</span>
+            </div>
+            <h3 class="fw-bold mb-0 text-dark" id="codingProblemTitle">Loading DSA Challenge...</h3>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label for="selectCodingDifficulty" class="small fw-semibold text-secondary d-none d-sm-inline">Difficulty:</label>
+            <select class="form-select form-select-sm rounded-pill px-3" id="selectCodingDifficulty" style="width: auto;">
+              <option value="Easy">Easy</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" id="btnFetchNewProblem">
+              <i class="fa-solid fa-arrows-rotate me-1"></i> New Problem
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <!-- Left Column: Problem Details, Constraints, Examples -->
+        <div class="col-lg-5">
+          <div class="card glass-card p-4 border-0 h-100">
+            <h5 class="fw-bold mb-3 text-primary">
+              <i class="fa-solid fa-file-code me-2"></i> Problem Description
+            </h5>
+            <div id="codingProblemDesc" class="text-secondary small mb-3 lh-base">
+              Loading problem statement and algorithmic context...
+            </div>
+
+            <h6 class="fw-bold text-dark mt-2 mb-2 small"><i class="fa-solid fa-arrow-right-to-bracket text-primary me-1"></i> Input / Output Format</h6>
+            <div class="p-3 bg-light rounded-3 border small mb-3">
+              <div class="mb-1"><b>Input:</b> <span id="codingInputFormat" class="text-secondary">Standard arguments</span></div>
+              <div><b>Output:</b> <span id="codingOutputFormat" class="text-secondary">Computed result</span></div>
+            </div>
+
+            <h6 class="fw-bold text-dark mt-2 mb-2 small"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i> Constraints</h6>
+            <ul id="codingConstraintsList" class="small text-secondary mb-3 ps-3">
+              <li>1 &lt;= N &lt;= 10^5</li>
+              <li>Optimal algorithmic complexity expected.</li>
+            </ul>
+
+            <h6 class="fw-bold text-dark mt-2 mb-2 small"><i class="fa-solid fa-list-check text-success me-1"></i> Examples</h6>
+            <div id="codingExamplesContainer" class="d-flex flex-column gap-2 mb-3">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Monaco Editor & Evaluation Sandbox -->
+        <div class="col-lg-7">
+          <div class="card glass-card p-4 border-0">
+            <!-- Editor Header Toolbar -->
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div class="d-flex align-items-center gap-2">
+                <label for="codingLanguageSelect" class="small fw-bold text-secondary mb-0">
+                  <i class="fa-solid fa-code text-primary me-1"></i> Language:
+                </label>
+                <select class="form-select form-select-sm rounded-pill px-3" id="codingLanguageSelect" style="width: auto;">
+                  <option value="python" selected>Python 3</option>
+                  <option value="cpp">C++ (GCC)</option>
+                  <option value="java">Java (OpenJDK)</option>
+                </select>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" id="btnResetCode" title="Reset to starter boilerplate">
+                  <i class="fa-solid fa-rotate-left me-1"></i> Reset
+                </button>
+                <button type="button" class="btn btn-sm btn-success rounded-pill px-4 fw-semibold shadow-sm" id="btnRunCode">
+                  <i class="fa-solid fa-play me-1"></i> Run &amp; Evaluate
+                </button>
+              </div>
+            </div>
+
+            <!-- Monaco Editor Container -->
+            <div class="position-relative mb-3">
+              <div id="monacoEditorContainer" class="rounded-3 border overflow-hidden" style="height: 420px; width: 100%;"></div>
+              <!-- Resilient fallback textarea if CDN fails or blocked -->
+              <textarea id="codeTextareaFallback" class="form-control font-monospace d-none rounded-3" rows="16" spellcheck="false" placeholder="Write code here..."></textarea>
+              <div id="editorLoadingSpinner" class="position-absolute top-50 start-50 translate-middle text-center d-none">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="small text-muted mt-2">Initializing Editor...</div>
+              </div>
+            </div>
+
+            <!-- Evaluation Results Container (Hidden until user clicks Run & Evaluate) -->
+            <div id="codingResultsPanel" class="d-none">
+              <hr class="my-3"/>
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h5 class="fw-bold mb-0">
+                  <i class="fa-solid fa-square-poll-vertical text-primary me-2"></i> Assessment Results
+                </h5>
+                <div>
+                  <span class="badge rounded-pill px-3 py-2 fw-semibold" id="codingVerdictBadge">Pending</span>
+                </div>
+              </div>
+
+              <!-- Scores & Big-O Complexity Row -->
+              <div class="row g-2 mb-3">
+                <div class="col-sm-3 col-6">
+                  <div class="p-2 bg-light rounded-3 border text-center">
+                    <small class="text-muted d-block">Correctness</small>
+                    <span class="fw-bold text-primary fs-6" id="codeCorrectnessScore">--/100</span>
+                  </div>
+                </div>
+                <div class="col-sm-3 col-6">
+                  <div class="p-2 bg-light rounded-3 border text-center">
+                    <small class="text-muted d-block">Code Quality</small>
+                    <span class="fw-bold text-success fs-6" id="codeQualityScore">--/100</span>
+                  </div>
+                </div>
+                <div class="col-sm-3 col-6">
+                  <div class="p-2 bg-light rounded-3 border text-center">
+                    <small class="text-muted d-block">Time Complexity</small>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" id="codeTimeComplexity">O(N)</span>
+                  </div>
+                </div>
+                <div class="col-sm-3 col-6">
+                  <div class="p-2 bg-light rounded-3 border text-center">
+                    <small class="text-muted d-block">Space Complexity</small>
+                    <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill font-monospace" id="codeSpaceComplexity">O(1)</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Complexity Explanations -->
+              <div class="p-3 bg-light rounded-3 border small mb-3">
+                <div class="mb-1"><i class="fa-solid fa-stopwatch text-primary me-1"></i> <b>Time Complexity:</b> <span id="codeTimeExplanation" class="text-secondary">--</span></div>
+                <div><i class="fa-solid fa-microchip text-info me-1"></i> <b>Space Complexity:</b> <span id="codeSpaceExplanation" class="text-secondary">--</span></div>
+              </div>
+
+              <!-- Test Cases Breakdown -->
+              <h6 class="fw-bold text-dark mb-2 small"><i class="fa-solid fa-vial-circle-check text-primary me-1"></i> Test Case Execution Results</h6>
+              <div id="testCasesContainer" class="d-flex flex-column gap-2 mb-3">
+                <!-- Test cases populated dynamically -->
+              </div>
+
+              <!-- Feedback and Optimization Suggestions -->
+              <div class="p-3 bg-light rounded-3 border small">
+                <h6 class="fw-bold text-dark mb-1 small"><i class="fa-solid fa-lightbulb text-warning me-1"></i> Algorithmic Feedback &amp; Suggestions</h6>
+                <p id="codeFeedbackText" class="text-secondary mb-2 lh-base">--</p>
+                <ul id="codeSuggestionsList" class="mb-0 text-secondary ps-3">
+                </ul>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- End Interactive DSA & Coding Assessment Sandbox -->
+
   </main>
 
   <!-- Completion Modal -->
@@ -423,6 +605,8 @@
 
   <!-- Bootstrap 5 JS Bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Monaco Editor AMD Loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
   <!-- Custom JS -->
   <script src="{{ url_for('static', filename='js/script.js') }}"></script>
   <!-- Vercel Web Analytics -->
