@@ -13634,6 +13634,36 @@ def api_saved_job_description_item(saved_id):
     }), 200
 
 
+
+@app.route("/api/export/csv/<data_type>", methods=["GET"])
+def api_export_csv(data_type):
+    """
+    Export student placement preparation data to CSV (#274).
+    Supported types: applications, interviews, notes, coding.
+    """
+    from utils.csv_export_service import get_csv_export
+    student_id = flask_session.get("user_id") or "default_student"
+    try:
+        csv_data, filename = get_csv_export(data_type, student_id)
+        response = Response(csv_data, mimetype="text/csv")
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error generating CSV export for {data_type}: {e}")
+        return jsonify({"success": False, "error": "Internal error generating CSV export."}), 500
+
+
+@app.route("/export", methods=["GET"])
+def export_dashboard_page():
+    """
+    Dashboard page to download preparation data CSV files (#274).
+    """
+    student_id = flask_session.get("user_id") or "default_student"
+    return render_template("csv_export.html", student_id=student_id)
+
+
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000
     app.run(debug=True, port=5000)
