@@ -3557,6 +3557,42 @@ def api_evaluate_star():
         }), 500
 
 
+# ============================================================================
+# INTERVIEW PERFORMANCE BREAKDOWN ENDPOINTS (#267)
+# ============================================================================
+
+@app.route("/api/interview/<session_id>/breakdown", methods=["GET"])
+def api_get_interview_breakdown(session_id: str):
+    """
+    Returns a comprehensive category and competency breakdown for a given interview session,
+    highlighting scores across Technical Knowledge, Communication, Problem-Solving,
+    Answer Relevance, along with top strengths and improvement areas.
+    """
+    try:
+        session = get_interview_session(session_id)
+        if not session:
+            return jsonify({"status": "error", "message": "Interview session not found."}), 404
+
+        from utils.interview_performance_breakdown import calculate_competency_breakdown
+        breakdown = calculate_competency_breakdown(session.get("answers", []))
+        summary = live_interview_agent.calculate_session_summary(session.get("answers", []))
+
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "overall_score": summary.get("overall_score", 0),
+            "readiness_verdict": summary.get("readiness_verdict"),
+            "category_scores": summary.get("category_scores", {}),
+            "competency_breakdown": breakdown,
+            "strengths": breakdown.get("strengths", []),
+            "improvements": breakdown.get("improvements", []),
+            "verbal_metrics": summary.get("verbal_metrics", {})
+        }), 200
+    except Exception as e:
+        logger.error(f"Error computing performance breakdown for {session_id}: {e}")
+        return jsonify({"status": "error", "message": "Failed to compute performance breakdown."}), 500
+
+
 @app.route("/interview/<analysis_id>/reset", methods=["POST"])
 def reset_interview_session(analysis_id: str):
     """
