@@ -13634,6 +13634,75 @@ def api_saved_job_description_item(saved_id):
     }), 200
 
 
+
+@app.route("/api/offers", methods=["GET", "POST"])
+def api_offers_list_create():
+    """
+    List and create private student job offers (#330).
+    """
+    from utils.offer_comparison_service import get_student_offers, create_job_offer
+    student_id = flask_session.get("user_id") or "default_student"
+
+    if request.method == "GET":
+        offers = get_student_offers(student_id)
+        return jsonify({"success": True, "offers": offers}), 200
+
+    payload = request.get_json(silent=True) or request.form
+    try:
+        res = create_job_offer(
+            student_id=student_id,
+            company_name=payload.get("company_name", ""),
+            role_title=payload.get("role_title", ""),
+            base_salary=float(payload.get("base_salary", 0)),
+            bonus=float(payload.get("bonus", 0)),
+            equity_annual=float(payload.get("equity_annual", 0)),
+            location=payload.get("location", "Remote"),
+            work_mode=payload.get("work_mode", "Hybrid"),
+            benefits_summary=payload.get("benefits_summary", ""),
+            deadline_date=payload.get("deadline_date"),
+            notes=payload.get("notes", "")
+        )
+        return jsonify(res), 201
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Error creating job offer: {e}")
+        return jsonify({"success": False, "error": "Internal error creating offer."}), 500
+
+
+@app.route("/api/offers/compare", methods=["POST"])
+def api_offers_compare():
+    """
+    Compare selected private student job offers side-by-side (#330).
+    """
+    from utils.offer_comparison_service import compare_job_offers
+    student_id = flask_session.get("user_id") or "default_student"
+    payload = request.get_json(silent=True) or request.form
+    offer_ids = payload.get("offer_ids") or []
+    if isinstance(offer_ids, str):
+        offer_ids = [o.strip() for o in offer_ids.split(",") if o.strip()]
+
+    try:
+        comparison = compare_job_offers(student_id, offer_ids)
+        return jsonify(comparison), 200
+    except (KeyError, ValueError) as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Error comparing job offers: {e}")
+        return jsonify({"success": False, "error": "Internal error comparing offers."}), 500
+
+
+@app.route("/offers/compare", methods=["GET"])
+def offers_compare_page():
+    """
+    Render private job offers comparison view (#330).
+    """
+    from utils.offer_comparison_service import get_student_offers
+    student_id = flask_session.get("user_id") or "default_student"
+    offers = get_student_offers(student_id)
+    return render_template("offer_comparison.html", student_id=student_id, offers=offers)
+
+
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000
     app.run(debug=True, port=5000)
