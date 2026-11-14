@@ -13634,6 +13634,35 @@ def api_saved_job_description_item(saved_id):
     }), 200
 
 
+
+@app.route("/api/user/search", methods=["GET"])
+def api_user_search():
+    """
+    Private search endpoint across all student saved records (#324).
+    """
+    from utils.saved_data_search_service import search_student_saved_data
+    student_id = flask_session.get("user_id") or "default_student"
+    query = request.args.get("q", "")
+    category = request.args.get("category", "all")
+    try:
+        limit = min(50, max(1, int(request.args.get("limit", 20))))
+    except (ValueError, TypeError):
+        limit = 20
+
+    data = search_student_saved_data(student_id=student_id, query=query, filter_category=category, limit=limit)
+    return jsonify(data), 200
+
+
+@app.route("/search", methods=["GET"])
+def search_page():
+    """
+    Search page UI for private student saved data (#324).
+    """
+    student_id = flask_session.get("user_id") or "default_student"
+    initial_query = request.args.get("q", "")
+    return render_template("search.html", student_id=student_id, initial_query=initial_query)
+
+
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000
     app.run(debug=True, port=5000)
