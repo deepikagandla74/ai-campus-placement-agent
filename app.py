@@ -13634,6 +13634,40 @@ def api_saved_job_description_item(saved_id):
     }), 200
 
 
+
+@app.route("/api/validate/input", methods=["POST"])
+def api_validate_input():
+    """
+    Central input validation testing and client pre-flight check endpoint (#276).
+    """
+    from utils.input_validator import (
+        validate_registration_payload,
+        validate_job_application_payload,
+        validate_interview_answer_payload,
+        ValidationError
+    )
+    payload = request.get_json(silent=True) or request.form
+    target_type = payload.get("type", "registration")
+    data = payload.get("data") or {}
+
+    try:
+        if target_type == "registration":
+            validated = validate_registration_payload(data)
+        elif target_type == "job_application":
+            validated = validate_job_application_payload(data)
+        elif target_type == "interview_answer":
+            validated = validate_interview_answer_payload(data)
+        else:
+            return jsonify({"success": False, "error": f"Unknown validation schema type '{target_type}'."}), 400
+
+        return jsonify({"success": True, "validated": validated}), 200
+    except ValidationError as ve:
+        return jsonify(ve.to_dict()), 422
+    except Exception as e:
+        logger.error(f"Error in input validation pre-flight: {e}")
+        return jsonify({"success": False, "error": "Internal validation error."}), 500
+
+
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000
     app.run(debug=True, port=5000)
