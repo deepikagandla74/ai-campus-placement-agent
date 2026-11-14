@@ -13634,6 +13634,45 @@ def api_saved_job_description_item(saved_id):
     }), 200
 
 
+
+@app.route("/api/interview/compare", methods=["POST"])
+def api_interview_compare():
+    """
+    Compare multiple interview sessions for the logged-in student (#273).
+    """
+    from utils.interview_session_comparator import compare_interview_sessions
+    student_id = flask_session.get("user_id") or "default_student"
+    payload = request.get_json(silent=True) or request.form
+    session_ids = payload.get("session_ids") or []
+    if isinstance(session_ids, str):
+        session_ids = [s.strip() for s in session_ids.split(",") if s.strip()]
+
+    if not session_ids or len(session_ids) < 2:
+        return jsonify({"success": False, "error": "Please provide at least two interview session IDs to compare."}), 400
+
+    try:
+        comparison = compare_interview_sessions(session_ids=session_ids, student_id=student_id)
+        return jsonify(comparison), 200
+    except KeyError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except PermissionError as e:
+        return jsonify({"success": False, "error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error during interview comparison: {e}")
+        return jsonify({"success": False, "error": "Internal error comparing interview sessions."}), 500
+
+
+@app.route("/interview/compare", methods=["GET"])
+def interview_compare_page():
+    """
+    Render interview comparison page (#273).
+    """
+    student_id = flask_session.get("user_id") or "default_student"
+    return render_template("interview_compare.html", student_id=student_id)
+
+
 if __name__ == "__main__":
     # Boot Flask server locally on default port 5000
     app.run(debug=True, port=5000)
