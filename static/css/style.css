@@ -5365,3 +5365,52 @@ body {
   }
 }
 
+
+/* Preserve control boundaries and data in the user's high contrast palette. */
+@media (forced-colors: active) {
+  :root :focus-visible,
+  :root :is(.skip-link, .btn, .btn-close, .form-control, .form-select, .form-check-input,
+      .upload-area, .nav-link, .dropdown-item, .page-link, .navbar-brand, [role="button"]):focus-visible {
+    outline: 3px solid Highlight !important;
+    box-shadow: none !important;
+  }
+
+  :root :is(.btn, .form-control, .form-select, .form-check-input, .upload-area) {
+    border-color: ButtonText !important;
+  }
+
+  :root :is(.card, .progress, .chart-data-table-wrapper, .badge) {
+    border: 1px solid CanvasText !important;
+  }
+
+  :root .badge[class] {
+    color: CanvasText !important;
+    background: Canvas !important;
+  }
+
+  :root .progress {
+    background: Canvas !important;
+  }
+
+  :root .progress-bar {
+    background: Highlight !important;
+    color: HighlightText !important;
+    border-inline-end: 1px solid Canvas;
+  }
+
+  .circular-bg-ring { stroke: CanvasText; }
+  .circular-fill-ring { stroke: Highlight; }
+
+  /* These existing data tables show the values without relying on canvas colors. */
+  #progressTrendChartWrapper,
+  #skillsChartContainer,
+  #btnToggleProgressTrendTable,
+  #btnToggleSkillsComparisonTable {
+    display: none !important;
+  }
+
+  #progressTrendTableWrapper,
+  #skillsTableWrapper {
+    display: block !important;
+  }
+}
