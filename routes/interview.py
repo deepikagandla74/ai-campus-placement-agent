@@ -159,6 +159,12 @@ def api_set_interviewer_style():
     })
 
 
+@interview_bp.route("/interview/academic-questions")
+def academic_questions_guide() -> str:
+    """Render the guide without reading the student's profile or interview session."""
+    return render_template("academic_questions_guide.html")
+
+
 @interview_bp.route("/interview/<analysis_id>")
 def interview(analysis_id: str) -> str:
     """

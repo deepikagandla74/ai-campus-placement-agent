@@ -221,6 +221,9 @@
                   <label for="profileBacklogs" class="form-label small fw-semibold">Active Backlogs</label>
                   <input type="number" min="0" step="1" id="profileBacklogs" name="backlogs" class="form-control" value="{{ profile.backlogs if profile.backlogs is not none else 0 }}" placeholder="0">
                 </div>
+                <div class="col-12">
+                  <a class="small" href="{{ url_for('interview.academic_questions_guide') }}">How to discuss grades and backlogs in interviews</a>
+                </div>
               </div>
 
               <div class="row g-3 mb-3">
