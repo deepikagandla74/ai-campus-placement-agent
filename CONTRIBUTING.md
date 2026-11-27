@@ -251,6 +251,10 @@ def test_prop_sanitize_filename_invariants(raw_name: str | None, max_length: int
     assert sanitize_filename(clean, max_length=max_length) == clean
 ```
 
+### Testing forced colors
+
+Turn on a Windows contrast theme or emulate `forced-colors: active` in Chromium DevTools. Using Tab, check that dashboard links, profile inputs, and interview round buttons have a visible focus outline. Confirm status badges still have readable labels and dashboard tables show the score and skill counts. Turn forced colors off and confirm the dashboard chart/table switches still work.
+
 ### End-to-End Browser UI Testing with Playwright (#858)
 
 To guard against integration breakages across HTML templates, frontend JavaScript modules, CSS stylesheets, and backend route workflows, we maintain automated end-to-end (E2E) browser UI smoke tests powered by **[Playwright](https://playwright.dev/python/)**.
